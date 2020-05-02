@@ -222,7 +222,7 @@ export XCODE_FLAGS="MACOSX_DEPLOYMENT_TARGET=$MINIMAL_OSX_VERSION -sdk macosx$OS
 info "Building contribs"
 spushd "${vlcroot}/contrib"
 mkdir -p contrib-$TRIPLET && cd contrib-$TRIPLET
-../bootstrap --build=$TRIPLET --host=$TRIPLET > $out
+../bootstrap --disable-vpx --build=$TRIPLET --host=$TRIPLET > $out
 if [ "$REBUILD" = "yes" ]; then
     make clean
 fi
