@@ -825,6 +825,12 @@ static block_t *ParseMPEGBlock( decoder_t *p_dec, block_t *p_frag )
             p_sys->i_top_field_first   = p_frag->p_buffer[7] >> 7;
             p_sys->i_repeat_first_field= (p_frag->p_buffer[7]>>1)&0x01;
             p_sys->i_progressive_frame = p_frag->p_buffer[8] >> 7;
+            if (p_sys->i_progressive_frame != 0)
+                p_dec->fmt_out.video.i_interlaced = INTERLACED_PROGRESSIVE;
+            else if (p_sys->i_top_field_first)
+                p_dec->fmt_out.video.i_interlaced = INTERLACED_INTERLACED_TOP_FIRST;
+            else
+                p_dec->fmt_out.video.i_interlaced = INTERLACED_INTERLACED_BOTTOM_FIRST;
         }
         else if( extid == SEQUENCE_DISPLAY_EXTENSION_ID && p_frag->i_buffer > 8 )
         {
@@ -908,8 +914,67 @@ static block_t *ParseMPEGBlock( decoder_t *p_dec, block_t *p_frag )
             }
             p_dec->fmt_out.video.multiview_mode = mode;
         }
+        else if ( !memcmp( &p_frag->p_buffer[4], "DTG1", 4 )
+                  && p_frag->i_buffer >= 9 )
+        {
+            if (p_frag->p_buffer[8] == 0x41) //0b01000001 active_format_flag
+            {
+                p_dec->fmt_out.video.b_afdpresent = true;
+                p_dec->fmt_out.video.i_afd = p_frag->p_buffer[9] & 0x0F;
+            }
+            else
+                p_dec->fmt_out.video.b_afdpresent = false;
+        }
+        else if ( !memcmp( &p_frag->p_buffer[4], "GA94", 4 )
+                  && p_frag->i_buffer >= 9 )
+        {
+            if ( p_frag->p_buffer[8] == 0x06 )
+            {
+                p_dec->fmt_out.video.bardata.b_present = true;
+
+                uint8_t barflags = p_frag->p_buffer[9] >> 4; //4 reserved bytes
+                int16_t* p_bardata = (int16_t*)&p_frag->p_buffer[10];
+                if (barflags & 8)
+                {
+                    p_dec->fmt_out.video.bardata.i_end_of_top_bar =
+                            (int16_t)(ntoh16( *p_bardata ) & 0x3FFF);
+                    p_bardata++;
+                }
+                else
+                    p_dec->fmt_out.video.bardata.i_end_of_top_bar = -1;
+                if (barflags & 4)
+                {
+                    p_dec->fmt_out.video.bardata.i_start_of_bottom_bar =
+                            (int16_t)(ntoh16( *p_bardata ) & 0x3FFF);
+                    p_bardata++;
+                }
+                else
+                    p_dec->fmt_out.video.bardata.i_start_of_bottom_bar = -1;
+                if (barflags & 2)
+                {
+                    p_dec->fmt_out.video.bardata.i_end_of_left_bar =
+                            (int16_t)(ntoh16( *p_bardata ) & 0x3FFF);
+                    p_bardata++;
+                }
+                else
+                    p_dec->fmt_out.video.bardata.i_end_of_left_bar = -1;
+                if (barflags & 1)
+                {
+                    p_dec->fmt_out.video.bardata.i_start_of_right_bar =
+                            (int16_t)(ntoh16( *p_bardata ) & 0x3FFF);
+                    p_bardata++;
+                }
+                else
+                    p_dec->fmt_out.video.bardata.i_start_of_right_bar = -1;
+
+            }
+            else
+                // GA94 cc are handeled in cc_ProbeAndExtract
+                cc_ProbeAndExtract( &p_sys->cc, p_sys->i_top_field_first,
+                    &p_frag->p_buffer[4], p_frag->i_buffer - 4 );
+        }
         else
-        cc_ProbeAndExtract( &p_sys->cc, p_sys->i_top_field_first,
+            cc_ProbeAndExtract( &p_sys->cc, p_sys->i_top_field_first,
                     &p_frag->p_buffer[4], p_frag->i_buffer - 4 );
     }
     else if( startcode == PICTURE_STARTCODE )

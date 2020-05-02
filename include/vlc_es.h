@@ -319,6 +319,17 @@ typedef enum video_chroma_location_t
 #define CHROMA_LOCATION_MAX CHROMA_LOCATION_BOTTOM_CENTER
 } video_chroma_location_t;
 
+typedef enum video_interlaced_format_t
+{
+    INTERLACED_UNKNOWN = 0,
+    INTERLACED_PROGRESSIVE,
+    INTERLACED_INTERLACED_UNKNOWN,
+    INTERLACED_INTERLACED_TOP_FIRST,
+    INTERLACED_INTERLACED_BOTTOM_FIRST,
+    INTERLACED_INTERLACED_TOP_BOTTOM_TOP,
+    INTERLACED_INTERLACED_BOTTOM_TOP_BOTTOM
+} video_interlaced_format_t;
+
 /**
  * video format description
  */
@@ -370,6 +381,16 @@ struct video_format_t
         uint16_t MaxFALL; /* max frame average light level */
     } lighting;
     uint32_t i_cubemap_padding; /**< padding in pixels of the cube map faces */
+    video_interlaced_format_t i_interlaced;
+    bool b_afdpresent;
+    uint8_t i_afd;
+    struct {
+        bool b_present;
+        int16_t i_end_of_top_bar;
+        int16_t i_start_of_bottom_bar;
+        int16_t i_end_of_left_bar;
+        int16_t i_start_of_right_bar;
+    } bardata;
 };
 
 /**

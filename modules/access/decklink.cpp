@@ -3,9 +3,11 @@
  *****************************************************************************
  * Copyright (C) 2010 Steinar H. Gunderson
  * Copyright (C) 2012-2014 Rafaël Carré
+ * Copyright (C) 2018 LTN Global Communications
  *
  * Authors: Steinar H. Gunderson <steinar+vlc@gunderson.no>
-            Rafaël Carré <funman@videolanorg>
+ *          Rafaël Carré <funman@videolanorg>
+ *          Devin Heitmueller <dheitmueller@ltnglobal.com>
  *
  * This program is free software; you can redistribute it and/or modify it
  * under the terms of the GNU Lesser General Public License as published by
@@ -30,6 +32,7 @@
 #include <vlc_plugin.h>
 #include <vlc_demux.h>
 #include <vlc_atomic.h>
+#include <vlc_decklink.h>
 
 #include <arpa/inet.h>
 
@@ -41,7 +44,12 @@
  #define IDeckLinkProfileAttributes IDeckLinkAttributes
 #endif
 
+#ifdef HAVE_KLVANC
+#include "libklvanc/vanc.h"
+#endif
+
 #include "sdi.h"
+#include "klburnin.h"
 
 static int  Open (vlc_object_t *);
 static void Close(vlc_object_t *);
@@ -129,6 +137,18 @@ vlc_module_end ()
 
 static int Control(demux_t *, int, va_list);
 
+void write_status(int card, int line, const char *msg)
+{
+    char filename[128];
+    snprintf(filename, sizeof(filename), "/tmp/vlc_%d_line%d.txt", card, line);
+    FILE *file = fopen(filename, "w");
+    if (file) {
+        if (msg)
+            fwrite(msg, strlen(msg), 1, file);
+        fclose(file);
+    }
+}
+
 class DeckLinkCaptureDelegate;
 
 struct demux_sys_t
@@ -146,16 +166,38 @@ struct demux_sys_t
 
     es_out_id_t *video_es;
     es_format_t video_fmt;
-    es_out_id_t *audio_es;
-    es_out_id_t *cc_es;
+    es_out_id_t **audio_es;
+    int audio_es_count;
+    es_out_id_t *cc_es[4];
+    es_out_id_t *cc708_es[6];
 
     vlc_mutex_t pts_lock;
     int last_pts;  /* protected by <pts_lock> */
 
     uint32_t dominance_flags;
     int channels;
+    int64_t audio_channels_supported;
+
+#ifdef HAVE_KLVANC
+    struct klvanc_context_s *vanc_ctx;
+    uint16_t cdp_sequence_num;
+#endif
 
     bool tenbits;
+
+    /* Misc stuff just used for stats */
+#define STATUS_LEN 64
+    int card_index;
+    const char *field_dominance;
+    BMDTimeValue frame_duration, time_scale;
+    char mode_status[STATUS_LEN];
+    char cc_status[STATUS_LEN];
+    char afd_status[STATUS_LEN];
+    char scte104_status[STATUS_LEN];
+    char fc_status[STATUS_LEN];
+    time_t scte104_lastupdate;
+    uint32_t frame_counter;
+    uint32_t frame_counter_errors;
 };
 
 static const char *GetFieldDominance(BMDFieldDominance dom, uint32_t *flags)
@@ -163,7 +205,7 @@ static const char *GetFieldDominance(BMDFieldDominance dom, uint32_t *flags)
     switch(dom)
     {
         case bmdProgressiveFrame:
-            return "";
+            return ", progressive";
         case bmdProgressiveSegmentedFrame:
             return ", segmented";
         case bmdLowerFieldFirst:
@@ -183,12 +225,11 @@ static es_format_t GetModeSettings(demux_t *demux, IDeckLinkDisplayMode *m,
 {
     demux_sys_t *sys = demux->p_sys;
     uint32_t flags = 0;
-    (void)GetFieldDominance(m->GetFieldDominance(), &flags);
+    sys->field_dominance = GetFieldDominance(m->GetFieldDominance(), &flags);
 
-    BMDTimeValue frame_duration, time_scale;
-    if (m->GetFrameRate(&frame_duration, &time_scale) != S_OK) {
-        time_scale = 0;
-        frame_duration = 1;
+    if (m->GetFrameRate(&sys->frame_duration, &sys->time_scale) != S_OK) {
+        sys->time_scale = 0;
+        sys->frame_duration = 1;
     }
 
     es_format_t video_fmt;
@@ -211,8 +252,8 @@ static es_format_t GetModeSettings(demux_t *demux, IDeckLinkDisplayMode *m,
     video_fmt.video.i_height = m->GetHeight();
     video_fmt.video.i_sar_num = 1;
     video_fmt.video.i_sar_den = 1;
-    video_fmt.video.i_frame_rate = time_scale;
-    video_fmt.video.i_frame_rate_base = frame_duration;
+    video_fmt.video.i_frame_rate = sys->time_scale;
+    video_fmt.video.i_frame_rate_base = sys->frame_duration;
     video_fmt.i_bitrate = video_fmt.video.i_width * video_fmt.video.i_height * video_fmt.video.i_frame_rate * 2 * 8;
 
     unsigned aspect_num, aspect_den;
@@ -226,6 +267,131 @@ static es_format_t GetModeSettings(demux_t *demux, IDeckLinkDisplayMode *m,
 
     return video_fmt;
 }
+
+#ifdef HAVE_KLVANC
+struct vanc_cb_ctx {
+    demux_t *demux;
+    BMDTimeValue stream_time;
+};
+
+static int cb_EIA_708B(void *callback_context, struct klvanc_context_s *ctx,
+                       struct klvanc_packet_eia_708b_s *pkt)
+{
+    struct vanc_cb_ctx *cb_ctx = (struct vanc_cb_ctx *)callback_context;
+    demux_t     *demux = cb_ctx->demux;
+    demux_sys_t *p_sys = (demux_sys_t *)demux->p_sys;
+    uint16_t expected_cdp;
+
+    if (!pkt->checksum_valid)
+        return 0;
+
+    if (!pkt->header.ccdata_present)
+        return 0;
+
+    expected_cdp = p_sys->cdp_sequence_num + 1;
+    p_sys->cdp_sequence_num = pkt->header.cdp_hdr_sequence_cntr;
+    if (pkt->header.cdp_hdr_sequence_cntr != expected_cdp) {
+        msg_Dbg(demux, "CDP counter inconsistent.  Received=0x%04x Expected=%04x\n",
+                pkt->header.cdp_hdr_sequence_cntr, expected_cdp);
+        return 0;
+    }
+    block_t *cc = block_Alloc(pkt->ccdata.cc_count * 3);
+    if (cc == NULL)
+        return 0;
+
+    /* Extract the CC triples from the CDP and load them into a array of values.
+       Note that VLC expects all CC data to be provided to all decoders, as opposed
+       to only providing the relevant bytes for a specific CC decoder instance. */
+    for (size_t i = 0; i < pkt->ccdata.cc_count; i++) {
+        cc->p_buffer[3*i+0] =  0xf8 | (pkt->ccdata.cc[i].cc_valid ? 0x04 : 0x00) |
+                  (pkt->ccdata.cc[i].cc_type & 0x03);
+        cc->p_buffer[3*i+1] = pkt->ccdata.cc[i].cc_data[0];
+        cc->p_buffer[3*i+2] = pkt->ccdata.cc[i].cc_data[1];
+    }
+
+    cc->i_pts = cc->i_dts = VLC_TS_0 + cb_ctx->stream_time;
+    for (int j = 0; j < 4; j++) {
+        if (!p_sys->cc_es[j] && cdp_has_608(cc->p_buffer, cc->i_buffer)) {
+            es_format_t fmt;
+            char buf[32];
+            es_format_Init( &fmt, SPU_ES, VLC_CODEC_CEA608 );
+            fmt.subs.cc.i_channel = j;
+            snprintf(buf, sizeof(buf), "Closed captions %d", j + 1);
+            fmt.psz_description = strdup(buf);
+            if (fmt.psz_description) {
+                p_sys->cc_es[j] = es_out_Add(demux->out, &fmt);
+                msg_Dbg(demux, "Adding Closed captions stream %d", j);
+            }
+        }
+        if (p_sys->cc_es[j])
+            es_out_Send(demux->out, p_sys->cc_es[j], block_Duplicate(cc));
+    }
+    for (int j = 0; j < 6; j++)
+    {
+        if (!p_sys->cc708_es[j] && cdp_has_708(cc->p_buffer, cc->i_buffer))
+        {
+            es_format_t fmt;
+            char buf[32];
+            es_format_Init( &fmt, SPU_ES, VLC_CODEC_CEA708 );
+            fmt.subs.cc.i_channel = j;
+            snprintf(buf, sizeof(buf), "DTV Closed captions %d", j + 1);
+            fmt.psz_description = strdup(buf);
+            if (fmt.psz_description) {
+                p_sys->cc708_es[j] = es_out_Add(demux->out, &fmt);
+                msg_Dbg(demux, "Adding DTV Closed captions stream %d", j);
+            }
+        }
+        if (p_sys->cc708_es[j])
+            es_out_Send(demux->out, p_sys->cc708_es[j], block_Duplicate(cc));
+    }
+
+    snprintf(p_sys->cc_status, STATUS_LEN, "CC (line %d): CEA-608: %s, CEA-708: %s",
+             pkt->hdr.lineNr,
+             cdp_has_608(cc->p_buffer, cc->i_buffer) ? "present" : "none",
+             cdp_has_708(cc->p_buffer, cc->i_buffer) ? "present" : "none");
+
+    block_Release(cc);
+
+    return 0;
+}
+
+static int cb_AFD(void *callback_context, struct klvanc_context_s *ctx,
+                  struct klvanc_packet_afd_s *pkt)
+{
+    struct vanc_cb_ctx *cb_ctx = (struct vanc_cb_ctx *)callback_context;
+    demux_t     *demux = cb_ctx->demux;
+    demux_sys_t *p_sys = (demux_sys_t *)demux->p_sys;
+
+    snprintf(p_sys->afd_status, STATUS_LEN, "AFD (line %d): 0x%02x", pkt->hdr.lineNr, pkt->afd);
+
+    return 0;
+}
+
+static int cb_SCTE_104(void *callback_context, struct klvanc_context_s *ctx,
+                       struct klvanc_packet_scte_104_s *pkt)
+{
+    struct vanc_cb_ctx *cb_ctx = (struct vanc_cb_ctx *)callback_context;
+    demux_t     *demux = cb_ctx->demux;
+    demux_sys_t *p_sys = (demux_sys_t *)demux->p_sys;
+
+    snprintf(p_sys->scte104_status, STATUS_LEN,
+	     "SCTE-104 (line %d): present (Op=%x, numOps=%d)",
+	     pkt->hdr.lineNr, pkt->so_msg.opID, pkt->mo_msg.num_ops);
+    time(&p_sys->scte104_lastupdate);
+
+    return 0;
+}
+
+static struct klvanc_callbacks_s callbacks =
+{
+    cb_AFD,
+    cb_EIA_708B,
+    NULL,
+    cb_SCTE_104,
+    NULL,
+    NULL,
+};
+#endif
 
 class DeckLinkCaptureDelegate : public IDeckLinkInputCallback
 {
@@ -257,9 +423,14 @@ public:
         if( !(events & bmdVideoInputDisplayModeChanged ))
             return S_OK;
 
+	DECKLINK_STR tmp_name;
         const char *mode_name;
-        if (mode->GetName(&mode_name) != S_OK)
+        if (mode->GetName(&tmp_name) != S_OK) {
             mode_name = "unknown";
+	} else {
+	    mode_name = DECKLINK_STRDUP(tmp_name);
+	    DECKLINK_STRDUP(tmp_name);
+	}
 
         msg_Dbg(demux_, "Video input format changed to %s", mode_name);
         if (!sys->autodetect) {
@@ -314,6 +485,17 @@ HRESULT DeckLinkCaptureDelegate::VideoInputFrameArrived(IDeckLinkVideoInputFrame
         const int height = videoFrame->GetHeight();
         const int stride = videoFrame->GetRowBytes();
 
+        snprintf(sys->mode_status, STATUS_LEN, "Mode: %dx%d%s (%d/%d)", width, height,
+                 sys->field_dominance, sys->time_scale, sys->frame_duration);
+        snprintf(sys->cc_status, STATUS_LEN, "CC: None");
+        snprintf(sys->afd_status, STATUS_LEN, "AFD: None");
+        snprintf(sys->fc_status, STATUS_LEN, "Framecounter Errors: %d", sys->frame_counter_errors);
+
+        time_t curtime;
+        time(&curtime);
+        if (curtime > (sys->scte104_lastupdate + 5))
+            snprintf(sys->scte104_status, STATUS_LEN, "SCTE-104: None");
+
         int bpp = 0;
         switch (sys->video_fmt.i_codec) {
             case VLC_CODEC_I422_10L:
@@ -338,37 +520,54 @@ HRESULT DeckLinkCaptureDelegate::VideoInputFrameArrived(IDeckLinkVideoInputFrame
 
         if (sys->video_fmt.i_codec == VLC_CODEC_I422_10L) {
             v210_convert((uint16_t*)video_frame->p_buffer, frame_bytes, width, height);
+
+            uint32_t val = klburnin_V210_read_32bit_value((void *) frame_bytes, stride, 0);
+            if (val != 0 && sys->frame_counter + 1 != val) {
+                char t[160];
+                time_t now = time(0);
+                sprintf(t, "%s", ctime(&now));
+                t[strlen(t) - 1] = 0;
+                msg_Warn(demux_, "%s: KL OSD counter discontinuity, expected %08" PRIx32 " got %08" PRIx32 "\n",
+                         t, sys->frame_counter + 1, val);
+                sys->frame_counter_errors++;
+            }
+            sys->frame_counter = val;
+
+#ifdef HAVE_KLVANC
             IDeckLinkVideoFrameAncillary *vanc;
-            if (videoFrame->GetAncillaryData(&vanc) == S_OK) {
+            uint16_t decoded_words[16384];
+            if (sys->vanc_ctx && videoFrame->GetAncillaryData(&vanc) == S_OK) {
+                struct vanc_cb_ctx cb_ctx = {
+                    .demux = demux_,
+                    .stream_time = stream_time,
+                };
+                sys->vanc_ctx->callback_context = &cb_ctx;
+
                 for (int i = 1; i < 21; i++) {
                     uint32_t *buf;
+                    memset(decoded_words, 0, sizeof(decoded_words));
                     if (vanc->GetBufferForVerticalBlankingLine(i, (void**)&buf) != S_OK)
-                        break;
-                    uint16_t dec[width * 2];
-                    v210_convert(&dec[0], buf, width, 1);
-                    block_t *cc = vanc_to_cc(demux_, dec, width * 2);
-                    if (!cc)
                         continue;
-                    cc->i_pts = cc->i_dts = VLC_TS_0 + stream_time;
 
-                    if (!sys->cc_es) {
-                        es_format_t fmt;
-
-                        es_format_Init( &fmt, SPU_ES, VLC_CODEC_CEA608 );
-                        fmt.psz_description = strdup(N_("Closed captions 1"));
-                        if (fmt.psz_description) {
-                            sys->cc_es = es_out_Add(demux_->out, &fmt);
-                            msg_Dbg(demux_, "Adding Closed captions stream");
-                        }
+                    if (width == 720) {
+                        /* Standard definition video will have VANC spanning both
+                           Luma and Chroma channels */
+                        klvanc_v210_line_to_uyvy_c(buf, decoded_words, width);
+                    } else {
+                        if (klvanc_v210_line_to_nv20_c(buf, decoded_words,
+                                                       sizeof(decoded_words),
+                                                       (width / 6) * 6) < 0)
+                            continue;
                     }
-                    if (sys->cc_es)
-                        es_out_Send(demux_->out, sys->cc_es, cc);
-                    else
-                        block_Release(cc);
-                    break; // we found the line with Closed Caption data
+                    int ret = klvanc_packet_parse(sys->vanc_ctx, i, decoded_words,
+                                                  sizeof(decoded_words) / (sizeof(uint16_t)));
+                    if (ret < 0) {
+                        continue;
+                    }
                 }
                 vanc->Release();
             }
+#endif
         } else if (sys->video_fmt.i_codec == VLC_CODEC_UYVY) {
             for (int y = 0; y < height; ++y) {
                 const uint8_t *src = (const uint8_t *)frame_bytes + stride * y;
@@ -389,28 +588,47 @@ HRESULT DeckLinkCaptureDelegate::VideoInputFrameArrived(IDeckLinkVideoInputFrame
     }
 
     if (audioFrame) {
-        const int bytes = audioFrame->GetSampleFrameCount() * sizeof(int16_t) * sys->channels;
-
-        block_t *audio_frame = block_Alloc(bytes);
-        if (!audio_frame)
-            return S_OK;
-
         void *frame_bytes;
         audioFrame->GetBytes(&frame_bytes);
-        memcpy(audio_frame->p_buffer, frame_bytes, bytes);
 
+        int audio_offset = 0;
+        int audio_stride = sys->audio_channels_supported * sizeof(int16_t);
         BMDTimeValue packet_time;
         audioFrame->GetPacketTime(&packet_time, CLOCK_FREQ);
-        audio_frame->i_pts = audio_frame->i_dts = VLC_TS_0 + packet_time;
 
-        vlc_mutex_lock(&sys->pts_lock);
-        if (audio_frame->i_pts > sys->last_pts)
-            sys->last_pts = audio_frame->i_pts;
-        vlc_mutex_unlock(&sys->pts_lock);
+        for (int i = 0; i < sys->audio_es_count; i++)
+        {
+            int sample_size = sys->channels * sizeof(int16_t);
+            int bytes = audioFrame->GetSampleFrameCount() * sample_size;
 
-        es_out_SetPCR(demux_->out, audio_frame->i_pts);
-        es_out_Send(demux_->out, sys->audio_es, audio_frame);
+            block_t *audio_frame = block_Alloc(bytes);
+            if (!audio_frame)
+                return S_OK;
+
+            uint8_t *audio_in = ((uint8_t *) frame_bytes) + audio_offset;
+            for (int x = 0; x < bytes; x += sample_size) {
+                memcpy(&audio_frame->p_buffer[x], audio_in, sample_size);
+                audio_in += audio_stride;
+            }
+
+            audio_frame->i_pts = audio_frame->i_dts = VLC_TS_0 + packet_time;
+
+            vlc_mutex_lock(&sys->pts_lock);
+            if (audio_frame->i_pts > sys->last_pts)
+                sys->last_pts = audio_frame->i_pts;
+            vlc_mutex_unlock(&sys->pts_lock);
+
+            es_out_SetPCR(demux_->out, audio_frame->i_pts);
+            es_out_Send(demux_->out, sys->audio_es[i], audio_frame);
+            audio_offset += sample_size;
+        }
     }
+
+    write_status(sys->card_index, 1, sys->mode_status);
+    write_status(sys->card_index, 2, sys->cc_status);
+    write_status(sys->card_index, 3, sys->afd_status);
+    write_status(sys->card_index, 4, sys->scte104_status);
+    write_status(sys->card_index, 5, sys->fc_status);
 
     return S_OK;
 }
@@ -520,6 +738,7 @@ static int Open(vlc_object_t *p_this)
         msg_Err(demux, "Invalid card index %d", card_index);
         goto finish;
     }
+    sys->card_index = card_index;
 
     for (int i = 0; i <= card_index; i++) {
         if (sys->card)
@@ -530,9 +749,14 @@ static int Open(vlc_object_t *p_this)
         }
     }
 
+    DECKLINK_STR tmp_name;
     const char *model_name;
-    if (sys->card->GetModelName(&model_name) != S_OK)
+    if (sys->card->GetModelName(&tmp_name) != S_OK) {
         model_name = "unknown";
+    } else {
+        model_name = DECKLINK_STRDUP(tmp_name);
+	DECKLINK_FREE(tmp_name);
+    }
 
     msg_Dbg(demux, "Opened DeckLink PCI card %d (%s)", card_index, model_name);
 
@@ -611,9 +835,12 @@ static int Open(vlc_object_t *p_this)
         uint32_t field_flags;
         const char *field = GetFieldDominance(m->GetFieldDominance(), &field_flags);
         BMDDisplayMode id = ntohl(m->GetDisplayMode());
+	DECKLINK_STR tmp_name;
 
-        if (m->GetName(&mode_name) != S_OK)
+        if (m->GetName(&tmp_name) != S_OK)
             mode_name = "unknown";
+	mode_name = DECKLINK_STRDUP(tmp_name);
+	DECKLINK_FREE(tmp_name);
         if (m->GetFrameRate(&frame_duration, &time_scale) != S_OK) {
             time_scale = 0;
             frame_duration = 1;
@@ -642,6 +869,15 @@ static int Open(vlc_object_t *p_this)
         goto finish;
     }
 
+    if (sys->attributes->GetInt(BMDDeckLinkMaximumAudioChannels,
+				&sys->audio_channels_supported) != S_OK)
+    {
+        msg_Warn(demux, "Could not determine the number of channels supported.  Defaulting to 2.");
+	sys->audio_channels_supported = 2;
+    } else {
+        msg_Dbg(demux, "Card supports %lld audio channels", sys->audio_channels_supported);
+    }
+
     /* Set up audio. */
     sys->channels = var_InheritInteger(demux, "decklink-audio-channels");
     switch (sys->channels) {
@@ -660,11 +896,22 @@ static int Open(vlc_object_t *p_this)
     }
     rate = var_InheritInteger(demux, "decklink-audio-rate");
     if (rate > 0 && sys->channels > 0) {
-        if (sys->input->EnableAudioInput(rate, bmdAudioSampleType16bitInteger, sys->channels) != S_OK) {
+        if (sys->input->EnableAudioInput(rate, bmdAudioSampleType16bitInteger,
+					 sys->audio_channels_supported) != S_OK) {
             msg_Err(demux, "Failed to enable audio input");
             goto finish;
         }
     }
+
+#ifdef HAVE_KLVANC
+    if (klvanc_context_create(&sys->vanc_ctx) < 0) {
+        msg_Err(demux, "Cannot create VANC library context\n");
+        goto finish;
+    } else {
+        sys->vanc_ctx->verbose = 0;
+        sys->vanc_ctx->callbacks = &callbacks;
+    }
+#endif
 
     sys->delegate = new DeckLinkCaptureDelegate(demux);
     sys->input->SetCallback(sys->delegate);
@@ -679,18 +926,28 @@ static int Open(vlc_object_t *p_this)
              (char*)&sys->video_fmt.i_codec, sys->video_fmt.video.i_width, sys->video_fmt.video.i_height);
     sys->video_es = es_out_Add(demux->out, &sys->video_fmt);
 
-    es_format_t audio_fmt;
-    es_format_Init(&audio_fmt, AUDIO_ES, VLC_CODEC_S16N);
-    audio_fmt.audio.i_channels = sys->channels;
-    audio_fmt.audio.i_physical_channels = physical_channels;
-    audio_fmt.audio.i_rate = rate;
-    audio_fmt.audio.i_bitspersample = 16;
-    audio_fmt.audio.i_blockalign = audio_fmt.audio.i_channels * audio_fmt.audio.i_bitspersample / 8;
-    audio_fmt.i_bitrate = audio_fmt.audio.i_channels * audio_fmt.audio.i_rate * audio_fmt.audio.i_bitspersample;
+    sys->audio_es_count = sys->audio_channels_supported / sys->channels;
+    sys->audio_es = (es_out_id_t **) calloc(sys->audio_es_count, sizeof(es_out_id_t *));
+    if (!sys->audio_es) {
+        return VLC_ENOMEM;
+    }
 
-    msg_Dbg(demux, "added new audio es %4.4s %dHz %dbpp %dch",
-             (char*)&audio_fmt.i_codec, audio_fmt.audio.i_rate, audio_fmt.audio.i_bitspersample, audio_fmt.audio.i_channels);
-    sys->audio_es = es_out_Add(demux->out, &audio_fmt);
+    for (int i = 0; i < sys->audio_channels_supported / sys->channels; i++)
+    {
+        es_format_t audio_fmt;
+        es_format_Init(&audio_fmt, AUDIO_ES, VLC_CODEC_S16N);
+        audio_fmt.audio.i_channels = sys->channels;
+        audio_fmt.audio.i_physical_channels = physical_channels;
+        audio_fmt.audio.i_rate = rate;
+        audio_fmt.audio.i_bitspersample = 16;
+        audio_fmt.audio.i_blockalign = audio_fmt.audio.i_channels * audio_fmt.audio.i_bitspersample / 8;
+        audio_fmt.i_bitrate = audio_fmt.audio.i_channels * audio_fmt.audio.i_rate * audio_fmt.audio.i_bitspersample;
+
+        msg_Dbg(demux, "added new audio es %4.4s %dHz %dbpp %dch",
+                (char*)&audio_fmt.i_codec, audio_fmt.audio.i_rate,
+                audio_fmt.audio.i_bitspersample, audio_fmt.audio.i_channels);
+        sys->audio_es[i] = es_out_Add(demux->out, &audio_fmt);
+    }
 
     ret = VLC_SUCCESS;
 
@@ -700,6 +957,19 @@ finish:
 
     if (ret != VLC_SUCCESS)
         Close(p_this);
+
+    /* Set some initial values (to prevent stuff from some previous run
+       of the application from showing up... */
+    snprintf(sys->mode_status, STATUS_LEN, "Mode: Unknown");
+    snprintf(sys->cc_status, STATUS_LEN, "CC: None");
+    snprintf(sys->afd_status, STATUS_LEN, "AFD: None");
+    snprintf(sys->scte104_status, STATUS_LEN, "SCTE-104: None");
+    snprintf(sys->fc_status, STATUS_LEN, "Framecounter Errors: %d", sys->frame_counter_errors);
+
+    write_status(sys->card_index, 1, sys->mode_status);
+    write_status(sys->card_index, 2, sys->cc_status);
+    write_status(sys->card_index, 3, sys->afd_status);
+    write_status(sys->card_index, 4, sys->scte104_status);
 
     return ret;
 }
@@ -725,6 +995,10 @@ static void Close(vlc_object_t *p_this)
 
     if (sys->delegate)
         sys->delegate->Release();
+
+#ifdef HAVE_KLVANC
+    klvanc_context_destroy(sys->vanc_ctx);
+#endif
 
     vlc_mutex_destroy(&sys->pts_lock);
     free(sys);

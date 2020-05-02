@@ -73,6 +73,7 @@ static int PacketizeValidate(void *p_private, block_t *);
 static block_t * PacketizeDrain(void *);
 static bool ParseSEICallback( const hxxx_sei_data_t *, void * );
 static block_t *GetCc( decoder_t *, decoder_cc_desc_t * );
+static vlc_ancillary_t *GetVanc( decoder_t *p_dec, int *p_mask );
 
 struct decoder_sys_t
 {
@@ -107,6 +108,7 @@ struct decoder_sys_t
 
     /* */
     cc_storage_t *p_ccs;
+    vlc_ancillary_t *p_vanc;
 };
 
 #define BLOCK_FLAG_DROP (1 << BLOCK_FLAG_PRIVATE_SHIFT)
@@ -287,6 +289,9 @@ static void Close(vlc_object_t *p_this)
 
     cc_storage_delete( p_sys->p_ccs );
 
+    if( p_sys->p_vanc )
+        vlc_ancillary_StorageDelete( p_sys->p_vanc );
+
     free(p_sys);
 }
 
@@ -321,6 +326,17 @@ static void PacketizeFlush( decoder_t *p_dec )
 static block_t *GetCc( decoder_t *p_dec, decoder_cc_desc_t *p_desc )
 {
     return cc_storage_get_current( p_dec->p_sys->p_ccs, p_desc );
+}
+
+/*****************************************************************************
+ * GetVanc:
+ *****************************************************************************/
+static vlc_ancillary_t *GetVanc( decoder_t *p_dec, int *p_mask )
+{
+    VLC_UNUSED( p_mask );
+    vlc_ancillary_t *p_anc = p_dec->p_sys->p_vanc;
+    p_dec->p_sys->p_vanc = NULL;
+    return p_anc;
 }
 
 /****************************************************************************
@@ -597,6 +613,8 @@ static void ActivateSets(decoder_t *p_dec,
         if(p_dec->fmt_out.i_extra == 0 && p_vps && p_pps)
             SetsToAnnexB(p_sys, p_pps, p_sps, p_vps,
                          (uint8_t **)&p_dec->fmt_out.p_extra, &p_dec->fmt_out.i_extra);
+
+        //p_dec->fmt_out.video.i_interlaced = hevc_frame_is_progressive(p_sps, NULL) ? INTERLACED_PROGRESSIVE : INTERLACED_INTERLACED_UNKNOWN;
     }
 }
 
@@ -971,6 +989,34 @@ static bool ParseSEICallback( const hxxx_sei_data_t *p_sei_data, void *cbdata )
                 hevc_release_sei_pic_timing( p_sys->p_timing );
                 p_sys->p_timing = hevc_decode_sei_pic_timing( p_sei_data->p_bs,
                                                               p_sys->p_active_sps );
+                switch ( hevc_get_frame_interlaced(p_sys->p_timing) ) {
+                case 0:
+                    p_dec->fmt_out.video.i_interlaced = INTERLACED_PROGRESSIVE;
+                    break;
+                case 1:
+                case 2:
+                case 9:
+                case 10:
+                case 11:
+                case 12:
+                    p_dec->fmt_out.video.i_interlaced = INTERLACED_INTERLACED_UNKNOWN;
+                    break;
+                case 3:
+                    p_dec->fmt_out.video.i_interlaced = INTERLACED_INTERLACED_TOP_FIRST;
+                    break;
+                case 4:
+                    p_dec->fmt_out.video.i_interlaced = INTERLACED_INTERLACED_BOTTOM_FIRST;
+                    break;
+                case 5:
+                    p_dec->fmt_out.video.i_interlaced = INTERLACED_INTERLACED_TOP_BOTTOM_TOP;
+                    break;
+                case 6:
+                    p_dec->fmt_out.video.i_interlaced = INTERLACED_INTERLACED_BOTTOM_TOP_BOTTOM;
+                    break;
+                default:
+                    p_dec->fmt_out.video.i_interlaced = INTERLACED_UNKNOWN;
+                    break;
+                }
             }
         } break;
         case HXXX_SEI_USER_DATA_REGISTERED_ITU_T_T35:
@@ -980,6 +1026,26 @@ static bool ParseSEICallback( const hxxx_sei_data_t *p_sei_data, void *cbdata )
                 cc_storage_append( p_sys->p_ccs, true, p_sei_data->itu_t35.u.cc.p_data,
                                                        p_sei_data->itu_t35.u.cc.i_data );
             }
+            else if( p_sei_data->itu_t35.type == HXXX_ITU_T35_TYPE_AFD )
+            {
+                vlc_ancillary_t *p_anc = vlc_ancillary_New( ANCILLARY_AFD );
+                if( p_anc )
+                {
+                    p_anc->afd.val = p_sei_data->itu_t35.u.afd;
+                    vlc_ancillary_StorageAppend( &p_sys->p_vanc, p_anc );
+                    p_dec->fmt_out.video.b_afdpresent = p_anc->afd.val != -1;
+                    p_dec->fmt_out.video.i_afd = p_anc->afd.val;
+                }
+            }
+            else if ( p_sei_data->itu_t35.type == HXXX_ITU_T35_TYPE_BARDATA )
+            {
+                p_dec->fmt_out.video.bardata.b_present = true;
+                p_dec->fmt_out.video.bardata.i_end_of_top_bar = p_sei_data->itu_t35.u.bardata.i_end_of_top_bar;
+                p_dec->fmt_out.video.bardata.i_start_of_bottom_bar = p_sei_data->itu_t35.u.bardata.i_start_of_bottom_bar;
+                p_dec->fmt_out.video.bardata.i_end_of_left_bar = p_sei_data->itu_t35.u.bardata.i_end_of_left_bar;
+                p_dec->fmt_out.video.bardata.i_start_of_right_bar = p_sei_data->itu_t35.u.bardata.i_start_of_right_bar;
+            }
+
         } break;
         case HXXX_SEI_FRAME_PACKING_ARRANGEMENT:
         {

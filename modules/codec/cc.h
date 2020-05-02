@@ -204,8 +204,8 @@ static inline void cc_AppendData( cc_data_t *c, uint8_t cc_preamble, const uint8
     else
     {
         cc_ProbeCEA708( c, i_field, cc );
-        /* By default enable at least channel 1 */
-        c->i_708channels |= 1;
+        /* Make six channels available */
+        c->i_708channels |= 0x3f;
     }
 
     c->p_data[c->i_data++] = cc_preamble;

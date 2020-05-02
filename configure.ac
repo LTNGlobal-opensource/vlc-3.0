@@ -1939,6 +1939,9 @@ then
   AC_LANG_PUSH(C++)
   AC_CHECK_HEADERS(DeckLinkAPIDispatch.cpp, [
       have_decklink=yes
+      AS_IF([test "${SYS}" = "darwin"], [
+        VLC_ADD_LIBS([decklink decklinkoutput],[-Wl,-framework,CoreFoundation])
+      ])
   ], [
       AC_MSG_WARN(Blackmagic DeckLink SDI include files not found, decklink disabled)
   ])
@@ -2977,6 +2980,23 @@ AS_IF( [test "${enable_libass}" != "no"], [
         AC_MSG_WARN([${LIBASS_PKG_ERRORS}.])
       ])
   ])
+
+dnl
+dnl VANC processing modules
+dnl
+AC_ARG_ENABLE(klvanc,
+  [  --enable-klvanc        Kernel Labs VANC library (default enabled)])
+AS_IF( [test "${enable_klvanc}" != "no" ],[
+  PKG_CHECK_MODULES(KLVANC, [libklvanc >= 1.0], [
+      have_klvanc="yes"
+      VLC_ADD_PLUGIN([klvanc])
+      AC_DEFINE(HAVE_KLVANC, 1, [Define if libklvanc is available.])
+    ],[
+      AC_MSG_WARN(Library [libklvanc] needed for [decklink] was not found)
+      have_aribb24="no"
+  ])
+])
+AM_CONDITIONAL([HAVE_KLVANC], [test x"${have_klvanc}" = x"yes"])
 
 dnl
 dnl ARIB subtitles rendering module
