@@ -17,6 +17,9 @@ libmodplug: libmodplug-$(MODPLUG_VERSION).tar.gz .sum-modplug
 	$(UNPACK)
 	$(APPLY) $(SRC)/modplug/modplug-win32-static.patch
 	$(APPLY) $(SRC)/modplug/macosx-do-not-force-min-version.patch
+ifdef HAVE_DARWIN_OS
+	$(APPLY) $(SRC)/modplug/mac-use-c-stdlib.patch
+endif
 	$(call pkg_static,"libmodplug.pc.in")
 	$(MOVE)
 
