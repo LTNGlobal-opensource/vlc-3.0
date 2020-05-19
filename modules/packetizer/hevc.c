@@ -51,18 +51,12 @@
 static int  Open (vlc_object_t *);
 static void Close(vlc_object_t *);
 
-#define INTRA_TEXT N_("Enable decoding of HEVC P/B-frame only streams")
-#define INTRA_LONGTEXT N_(\
-    "Some low latency HEVC video encoders don't produce iframes. " \
-    "Enable this if you have HEVC that will not decode")
-
 vlc_module_begin ()
     set_category(CAT_SOUT)
     set_subcategory(SUBCAT_SOUT_PACKETIZER)
     set_description(N_("HEVC/H.265 video packetizer"))
     set_capability("packetizer", 50)
     set_callbacks(Open, Close)
-    add_bool("accept-hevc-intra", true, INTRA_TEXT, INTRA_LONGTEXT, false)
 vlc_module_end ()
 
 
@@ -651,9 +645,6 @@ static void ParseStoredSEI( decoder_t *p_dec )
         {
             HxxxParse_AnnexB_SEI( p_nal->p_buffer, p_nal->i_buffer,
                                   2 /* nal header */, ParseSEICallback, p_dec );
-            if (!p_sys->b_init_sequence_complete) {
-                p_sys->b_init_sequence_complete = var_InheritBool(p_dec, "accept-hevc-intra");
-            }
         }
     }
 }
