@@ -739,6 +739,24 @@ static void ThreadChangeFilters(vout_thread_t *vout,
     vlc_array_init(&array_static);
     vlc_array_init(&array_interactive);
 
+    // force addition of field combiner
+    if ((vout->p->original.i_visible_height == 540) ||
+        (vout->p->original.i_visible_height == 288) ||
+        (vout->p->original.i_visible_height == 240)) {
+        
+        config_chain_t *cfg;
+        char *name;
+        free(config_ChainCreate(&name, &cfg, "hevc_combiner"));
+        
+        vout_filter_t *e = malloc(sizeof(*e));
+        if (likely(e))
+        {
+            e->name = name;
+            e->cfg  = cfg;
+            vlc_array_append_or_abort(&array_static, e);
+        }
+    }
+
     if ((vout->p->filter.has_deint =
          deinterlace == 1 || (deinterlace == -1 && vout->p->filter.has_deint)))
     {
