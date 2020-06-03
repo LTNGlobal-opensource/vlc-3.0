@@ -71,6 +71,7 @@ static int Create( vlc_object_t *p_this )
 static void Destroy( vlc_object_t *p_this )
 {
     filter_t *p_filter = (filter_t *)p_this;
+
     if (p_filter->p_sys != NULL) {
         if (p_filter->p_sys->field0_plane[0] != NULL) {
             free(p_filter->p_sys->field0_plane[0]);
