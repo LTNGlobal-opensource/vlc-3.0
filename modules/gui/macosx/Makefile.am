@@ -104,8 +104,8 @@ libmacosx_plugin_la_SOURCES = \
 	gui/macosx/VLCSliderCell.h gui/macosx/VLCSliderCell.m \
 	gui/macosx/VLCVolumeSlider.h gui/macosx/VLCVolumeSlider.m \
 	gui/macosx/VLCVolumeSliderCell.h gui/macosx/VLCVolumeSliderCell.m \
-	gui/macosx/VLCWrappableTextField.h gui/macosx/VLCWrappableTextField.m
-
+	gui/macosx/VLCWrappableTextField.h gui/macosx/VLCWrappableTextField.m \
+    ../src/revision.c
 
 # User interface compilation
 
