@@ -40,6 +40,12 @@
  * one arch to support again one day */
 #define PLATFORM "Intel 64bit"
 
+const char * get_revision(void)
+{
+    extern const char psz_vlc_changeset[];
+    return psz_vlc_changeset;
+}
+
 @interface VLCAboutWindowController ()
 {
     NSString *_authorsString;
@@ -115,7 +121,9 @@
 
     /* Setup the nameversion field */
     [o_name_version_field setStringValue: [NSString stringWithFormat:@"Version %s (%s)", VERSION_MESSAGE, PLATFORM]];
-
+    
+    [o_changeset_field setStringValue: [NSString stringWithFormat:@"(%s)", get_revision()]];
+    
     NSMutableArray *tmpArray = [NSMutableArray arrayWithArray: [toNSStr(psz_authors) componentsSeparatedByString:@"\n\n"]];
     NSUInteger count = [tmpArray count];
     for (NSUInteger i = 0; i < count; i++) {
