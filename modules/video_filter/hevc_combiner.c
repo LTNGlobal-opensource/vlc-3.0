@@ -152,7 +152,7 @@ static picture_t *Filter( filter_t *p_filter, picture_t *p_pic )
             msg_Dbg(p_filter, "source plane=%d, lines=%d, visible_lines=%d, size=%d, pitch=%d, visible_pitch=%d", i, p_pic->p[i].i_lines, p_pic->p[i].i_visible_lines, sourceSize, p_pic->p[i].i_pitch, p_pic->p[i].i_visible_pitch);
             
             int line = 0;
-            uint8_t *target = data + (field * pitch);
+            uint8_t *target = data;
             uint8_t *source = sourceData;
             uint8_t *field0 = p_filter->p_sys->field0_plane[i];
 
