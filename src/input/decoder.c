@@ -173,6 +173,7 @@ static int LoadDecoder( decoder_t *p_dec, bool b_packetizer,
     p_dec->pf_get_anc = NULL;
     p_dec->pf_packetize = NULL;
     p_dec->pf_flush = NULL;
+    p_dec->b_low_latency = var_InheritBool(p_dec, "low-latency");
 
     es_format_Copy( &p_dec->fmt_in, p_fmt );
     es_format_Init( &p_dec->fmt_out, p_fmt->i_cat, 0 );
@@ -1005,6 +1006,8 @@ static int DecoderQueueCc( decoder_t *p_videodec, block_t *p_cc,
     return 0;
 }
 
+mtime_t last_audio_timestamp = 0;
+
 static void DecoderGetVanc( decoder_owner_sys_t *p_owner,
                             decoder_t *p_dec, int anc_mask )
 {
@@ -1082,10 +1085,53 @@ static int DecoderPlayVideo( decoder_t *p_dec, picture_t *p_picture,
         p_picture->b_force = true;
     }
 
+    mtime_t d1 = p_picture->date;
     const bool b_dated = p_picture->date > VLC_TS_INVALID;
     int i_rate = INPUT_RATE_DEFAULT;
     DecoderFixTs( p_dec, &p_picture->date, NULL, NULL,
                   &i_rate, DECODER_BOGUS_VIDEO_DELAY );
+    mtime_t d2 = p_picture->date;
+    mtime_t now = mdate();
+    int64_t diff = d2 - now;
+    int64_t avdiff = (last_audio_timestamp - p_picture->date);
+    int64_t combined_difference = (diff + avdiff);
+    msg_Dbg( p_dec, "video d1=%"PRId64", d2=%"PRId64", now=%"PRId64" (diff=%"PRId64") (avdiff=%"PRId64") (combined=%"PRId64")", d1, d2, now, diff, avdiff, combined_difference);
+    //printf("latency %"PRId64" (%"PRId64") (%"PRId64")\n", diff, avdiff, combined_difference);
+    
+    if (p_dec->b_low_latency) 
+    {
+        if (combined_difference > 500000 || diff < -6000) {
+            static mtime_t last_latency_update = 0;
+            if (abs(diff) > 2500000) {
+                msg_Dbg( p_dec, "resetting latency adjustment");
+                diff = 0;
+            }
+            else if ((now - last_latency_update) > 100000) {
+                // the latency appears to be too great... force reduction
+                msg_Dbg( p_dec, "clock too far behind live, in low-latency mode...correcting");
+
+                mtime_t adjustment = diff;
+                //if (diff < 0) {
+                //    adjustment = diff;
+                //    msg_Dbg( p_dec, "adjusting forward... %"PRId64"", adjustment);
+                //}
+                
+                input_clock_ReduceLatency(p_owner->p_clock, adjustment);
+
+                // recalculate presentation time for this frame
+                p_picture->date = d1;
+                DecoderFixTs( p_dec, &p_picture->date, NULL, NULL, &i_rate, DECODER_BOGUS_VIDEO_DELAY );
+
+                d2 = p_picture->date;
+                now = mdate();
+                diff = d2 - now;
+
+                msg_Dbg( p_dec, "after correcting, diff=%"PRId64"", diff);
+
+                last_latency_update = mdate();
+            }
+        }
+    }
 
     vlc_mutex_unlock( &p_owner->lock );
 
@@ -1212,10 +1258,18 @@ static int DecoderPlayAudio( decoder_t *p_dec, block_t *p_audio,
     /* */
     int i_rate = INPUT_RATE_DEFAULT;
 
+    mtime_t d1 = p_audio->i_pts;  
     DecoderWaitUnblock( p_dec );
     DecoderFixTs( p_dec, &p_audio->i_pts, NULL, &p_audio->i_length,
                   &i_rate, AOUT_MAX_ADVANCE_TIME );
+    last_audio_timestamp = p_audio->i_pts;
     vlc_mutex_unlock( &p_owner->lock );
+
+
+    mtime_t d2 = p_audio->i_pts;
+    mtime_t now = mdate();
+    int64_t diff = d2 - now;
+    msg_Dbg( p_dec, "audio d1=%"PRId64", d2=%"PRId64", now=%"PRId64" (diff=%"PRId64")", d1, d2, now, diff);
 
     audio_output_t *p_aout = p_owner->p_aout;
 

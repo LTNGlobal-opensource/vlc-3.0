@@ -70,6 +70,9 @@ struct decoder_t
     /* Tell the decoder if it is allowed to drop frames */
     bool                b_frame_drop_allowed;
 
+    /* Tell decoder to prioritize low-latency */
+    bool                b_low_latency;
+
 #   define VLCDEC_SUCCESS   VLC_SUCCESS
 #   define VLCDEC_ECRITICAL VLC_EGENERIC
 #   define VLCDEC_RELOAD    (-100)

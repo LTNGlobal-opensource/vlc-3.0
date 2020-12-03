@@ -116,6 +116,8 @@ int input_clock_ConvertTS( vlc_object_t *, input_clock_t *, int *pi_rate,
  */
 int input_clock_GetRate( input_clock_t * );
 
+void input_clock_ReduceLatency(input_clock_t *cl, mtime_t stream_time);
+
 /**
  * This function returns current clock state or VLC_EGENERIC if there is not a
  * reference point.

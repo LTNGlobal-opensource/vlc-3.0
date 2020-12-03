@@ -643,6 +643,12 @@ int InitVideoDec( vlc_object_t *obj )
     p_dec->pf_decode = DecodeVideo;
     p_dec->pf_flush  = Flush;
 
+    /* low latency mode */
+    if (var_InheritBool(p_dec, "low-latency") == true) {
+        //p_dec->b_frame_drop_allowed = false;
+        msg_Dbg( p_dec, "Low latency mode. Will not drop late frames." );
+    }
+
     /* XXX: Writing input format makes little sense. */
     if( p_context->profile != FF_PROFILE_UNKNOWN )
         p_dec->fmt_in.i_profile = p_context->profile;
@@ -1091,6 +1097,30 @@ static picture_t *DecodeBlock( decoder_t *p_dec, block_t **pp_block, bool *error
         bool not_received_frame = ret;
 
         wait_mt( p_sys );
+
+        /*
+        static bool do_reset = true;
+        //msg_Err(p_dec, "blocks=%d", clock_count);
+        switch(frame->pict_type)
+        {
+            case AV_PICTURE_TYPE_I:
+                msg_Err(p_dec, "pict_type=I");
+                if (do_reset) {
+                    //input_clock_Reset(p_sys->);
+                    do_reset = false;
+                }
+                break;
+            case AV_PICTURE_TYPE_P:
+                msg_Err(p_dec, "pict_type=P");
+                break;
+            case AV_PICTURE_TYPE_S:
+                msg_Err(p_dec, "pict_type=S");
+                break;
+            case AV_PICTURE_TYPE_B:
+                msg_Err(p_dec, "pict_type=B");
+                break;
+        }
+        */
 
         if( eos_spotted )
             p_sys->b_first_frame = true;

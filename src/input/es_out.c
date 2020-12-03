@@ -2640,39 +2640,42 @@ static int EsOutControlLocked( es_out_t *out, int i_query, va_list args )
         }
         else if( p_pgrm == p_sys->p_pgrm )
         {
-            if( b_late && ( !input_priv(p_sys->p_input)->p_sout ||
-                            !input_priv(p_sys->p_input)->b_out_pace_control ) )
+            if (p_sys->video.i_count == 0 || p_sys->video.p_main_es->p_dec->b_low_latency == false) 
             {
-                const mtime_t i_pts_delay_base = p_sys->i_pts_delay - p_sys->i_pts_jitter;
-                mtime_t i_pts_delay = input_clock_GetJitter( p_pgrm->p_clock );
-
-                /* Avoid dangerously high value */
-                const mtime_t i_jitter_max = INT64_C(1000) * var_InheritInteger( p_sys->p_input, "clock-jitter" );
-                if( i_pts_delay > __MIN( i_pts_delay_base + i_jitter_max, INPUT_PTS_DELAY_MAX ) )
+                if( b_late && ( !input_priv(p_sys->p_input)->p_sout ||
+                                !input_priv(p_sys->p_input)->b_out_pace_control ) )
                 {
-                    msg_Err( p_sys->p_input,
-                             "ES_OUT_SET_(GROUP_)PCR  is called too late (jitter of %d ms ignored)",
-                             (int)(i_pts_delay - i_pts_delay_base) / 1000 );
-                    i_pts_delay = p_sys->i_pts_delay;
+                    const mtime_t i_pts_delay_base = p_sys->i_pts_delay - p_sys->i_pts_jitter;
+                    mtime_t i_pts_delay = input_clock_GetJitter( p_pgrm->p_clock );
 
-                    /* reset clock */
-                    for( int i = 0; i < p_sys->i_pgrm; i++ )
-                      input_clock_Reset( p_sys->pgrm[i]->p_clock );
+                    /* Avoid dangerously high value */
+                    const mtime_t i_jitter_max = INT64_C(1000) * var_InheritInteger( p_sys->p_input, "clock-jitter" );
+                    if( i_pts_delay > __MIN( i_pts_delay_base + i_jitter_max, INPUT_PTS_DELAY_MAX ) )
+                    {
+                        msg_Err( p_sys->p_input,
+                                "ES_OUT_SET_(GROUP_)PCR  is called too late (jitter of %d ms ignored)",
+                                (int)(i_pts_delay - i_pts_delay_base) / 1000 );
+                        i_pts_delay = p_sys->i_pts_delay;
+
+                        /* reset clock */
+                        for( int i = 0; i < p_sys->i_pgrm; i++ )
+                        input_clock_Reset( p_sys->pgrm[i]->p_clock );
+                    }
+                    else
+                    {
+                        msg_Err( p_sys->p_input,
+                                "ES_OUT_SET_(GROUP_)PCR  is called too late (pts_delay increased to %d ms)",
+                                (int)(i_pts_delay/1000) );
+
+                        /* Force a rebufferization when we are too late */
+
+                        /* It is not really good, as we throw away already buffered data
+                        * TODO have a mean to correctly reenter bufferization */
+                        es_out_Control( out, ES_OUT_RESET_PCR );
+                    }
+
+                    es_out_SetJitter( out, i_pts_delay_base, i_pts_delay - i_pts_delay_base, p_sys->i_cr_average );
                 }
-                else
-                {
-                    msg_Err( p_sys->p_input,
-                             "ES_OUT_SET_(GROUP_)PCR  is called too late (pts_delay increased to %d ms)",
-                             (int)(i_pts_delay/1000) );
-
-                    /* Force a rebufferization when we are too late */
-
-                    /* It is not really good, as we throw away already buffered data
-                     * TODO have a mean to correctly reenter bufferization */
-                    es_out_Control( out, ES_OUT_RESET_PCR );
-                }
-
-                es_out_SetJitter( out, i_pts_delay_base, i_pts_delay - i_pts_delay_base, p_sys->i_cr_average );
             }
         }
         return VLC_SUCCESS;

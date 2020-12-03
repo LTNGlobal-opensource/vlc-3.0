@@ -158,6 +158,8 @@ struct input_clock_t
     mtime_t i_next_drift_update;
     average_t drift;
 
+    mtime_t i_latency_offset;
+
     /* Late statistics */
     struct
     {
@@ -216,6 +218,7 @@ input_clock_t *input_clock_New( int i_rate )
     cl->i_pts_delay = 0;
     cl->b_paused = false;
     cl->i_pause_date = VLC_TS_INVALID;
+    cl->i_latency_offset = 0;
 
     return cl;
 }
@@ -331,6 +334,7 @@ void input_clock_Update( input_clock_t *cl, vlc_object_t *p_log,
  *****************************************************************************/
 void input_clock_Reset( input_clock_t *cl )
 {
+    printf("input_clock_Reset\n");
     vlc_mutex_lock( &cl->lock );
 
     cl->b_has_reference = false;
@@ -460,6 +464,16 @@ int input_clock_ConvertTS( vlc_object_t *p_object, input_clock_t *cl,
 
     return VLC_SUCCESS;
 }
+
+
+void input_clock_ReduceLatency(input_clock_t *cl, mtime_t drift)
+{
+    vlc_mutex_lock( &cl->lock );
+    printf("input_clock_ReduceLatency (%"PRId64")\n", drift);
+    cl->i_latency_offset = (drift + cl->i_latency_offset);
+    vlc_mutex_unlock( &cl->lock );
+}
+
 /*****************************************************************************
  * input_clock_GetRate: Return current rate
  *****************************************************************************/
@@ -606,13 +620,17 @@ static mtime_t ClockStreamToSystem( input_clock_t *cl, mtime_t i_stream )
     if( !cl->b_has_reference )
         return VLC_TS_INVALID;
 
-    return ( i_stream - cl->ref.i_stream ) * cl->i_rate / INPUT_RATE_DEFAULT +
-           cl->ref.i_system;
+    mtime_t i_time = (( i_stream - cl->ref.i_stream ) * cl->i_rate / INPUT_RATE_DEFAULT +
+           cl->ref.i_system) - cl->i_latency_offset;
+
+    //printf("i_stream=%"PRId64", ref.i_stream=%"PRId64", ref.i_system=%"PRId64", i_latency_offset=%"PRId64"\n", i_stream, cl->ref.i_stream, cl->ref.i_system, cl->i_latency_offset);
+
+    return i_time;
 }
 
 /*****************************************************************************
  * ClockSystemToStream: converts a system date to movie clock
- *****************************************************************************
+ ****************************************************************************
  * Caution : a valid reference point is needed for this to operate.
  *****************************************************************************/
 static mtime_t ClockSystemToStream( input_clock_t *cl, mtime_t i_system )
