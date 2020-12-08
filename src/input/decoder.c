@@ -1096,7 +1096,6 @@ static int DecoderPlayVideo( decoder_t *p_dec, picture_t *p_picture,
     int64_t avdiff = (last_audio_timestamp - p_picture->date);
     int64_t combined_difference = (diff + avdiff);
     msg_Dbg( p_dec, "video d1=%"PRId64", d2=%"PRId64", now=%"PRId64" (diff=%"PRId64") (avdiff=%"PRId64") (combined=%"PRId64")", d1, d2, now, diff, avdiff, combined_difference);
-    //printf("latency %"PRId64" (%"PRId64") (%"PRId64")\n", diff, avdiff, combined_difference);
     
     if (p_dec->b_low_latency) 
     {
@@ -1111,11 +1110,6 @@ static int DecoderPlayVideo( decoder_t *p_dec, picture_t *p_picture,
                 msg_Dbg( p_dec, "clock too far behind live, in low-latency mode...correcting");
 
                 mtime_t adjustment = diff;
-                //if (diff < 0) {
-                //    adjustment = diff;
-                //    msg_Dbg( p_dec, "adjusting forward... %"PRId64"", adjustment);
-                //}
-                
                 input_clock_ReduceLatency(p_owner->p_clock, adjustment);
 
                 // recalculate presentation time for this frame

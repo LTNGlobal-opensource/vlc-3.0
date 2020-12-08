@@ -1098,30 +1098,6 @@ static picture_t *DecodeBlock( decoder_t *p_dec, block_t **pp_block, bool *error
 
         wait_mt( p_sys );
 
-        /*
-        static bool do_reset = true;
-        //msg_Err(p_dec, "blocks=%d", clock_count);
-        switch(frame->pict_type)
-        {
-            case AV_PICTURE_TYPE_I:
-                msg_Err(p_dec, "pict_type=I");
-                if (do_reset) {
-                    //input_clock_Reset(p_sys->);
-                    do_reset = false;
-                }
-                break;
-            case AV_PICTURE_TYPE_P:
-                msg_Err(p_dec, "pict_type=P");
-                break;
-            case AV_PICTURE_TYPE_S:
-                msg_Err(p_dec, "pict_type=S");
-                break;
-            case AV_PICTURE_TYPE_B:
-                msg_Err(p_dec, "pict_type=B");
-                break;
-        }
-        */
-
         if( eos_spotted )
             p_sys->b_first_frame = true;
 

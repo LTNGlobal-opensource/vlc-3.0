@@ -623,8 +623,6 @@ static mtime_t ClockStreamToSystem( input_clock_t *cl, mtime_t i_stream )
     mtime_t i_time = (( i_stream - cl->ref.i_stream ) * cl->i_rate / INPUT_RATE_DEFAULT +
            cl->ref.i_system) - cl->i_latency_offset;
 
-    //printf("i_stream=%"PRId64", ref.i_stream=%"PRId64", ref.i_system=%"PRId64", i_latency_offset=%"PRId64"\n", i_stream, cl->ref.i_stream, cl->ref.i_system, cl->i_latency_offset);
-
     return i_time;
 }
 
