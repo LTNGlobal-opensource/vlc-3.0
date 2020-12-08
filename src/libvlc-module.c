@@ -470,6 +470,10 @@ static const char *const ppsz_pos_descriptions[] =
     "Enables framedropping on MPEG2 stream. Framedropping " \
     "occurs when your computer is not powerful enough" )
 
+#define LOW_LATENCY_TEXT N_("Low Latency Mode")
+#define LOW_LATENCY_LONGTEXT N_( \
+    "Prioritizes low latency playback over quality" )
+
 #define DROP_LATE_FRAMES_TEXT N_("Drop late frames")
 #define DROP_LATE_FRAMES_LONGTEXT N_( \
     "This drops frames that are late (arrive to the video output after " \
@@ -1570,6 +1574,8 @@ vlc_module_begin ()
     /* Used in vout_synchro */
     add_bool( "skip-frames", 1, SKIP_FRAMES_TEXT,
               SKIP_FRAMES_LONGTEXT, true )
+    add_bool( "low-latency", 0, LOW_LATENCY_TEXT,
+              LOW_LATENCY_LONGTEXT, true )
     add_bool( "quiet-synchro", 0, QUIET_SYNCHRO_TEXT,
               QUIET_SYNCHRO_LONGTEXT, true )
     add_bool( "keyboard-events", true, KEYBOARD_EVENTS_TEXT,

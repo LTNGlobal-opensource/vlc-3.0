@@ -887,7 +887,15 @@ static int ThreadDisplayPreparePicture(vout_thread_t *vout, bool reuse, bool fra
                         late_threshold = VOUT_DISPLAY_LATE_THRESHOLD;
                     const mtime_t predicted = mdate() + 0; /* TODO improve */
                     const mtime_t late = predicted - decoded->date;
+
+                    bool display_late = false;
                     if (late > late_threshold) {
+                        if (var_InheritBool(vout, "low-latency")) {
+                            display_late = true;
+                            msg_Warn(vout, "Picture late, but displaying anyway");
+                        }
+                    }
+                    if (late > late_threshold || display_late) {
                         msg_Warn(vout, "picture is too late to be displayed (missing %"PRId64" ms)", late/1000);
                         picture_Release(decoded);
                         vout_statistic_AddLost(&vout->p->statistic, 1);
