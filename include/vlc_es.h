@@ -351,6 +351,7 @@ struct video_format_t
 
     unsigned int i_frame_rate;                     /**< frame rate numerator */
     unsigned int i_frame_rate_base;              /**< frame rate denominator */
+    bool b_missing_frame_rate;
 
     uint32_t i_rmask, i_gmask, i_bmask;      /**< color masks for RGB chroma */
     int i_rrshift, i_lrshift;

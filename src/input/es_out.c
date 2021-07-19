@@ -3311,8 +3311,12 @@ static void EsOutUpdateInfo( es_out_t *out, es_out_id_t *es, const es_format_t *
             info_category_AddInfo( p_cat, _("Buffer dimensions"), "%ux%u",
                                    fmt->video.i_width, fmt->video.i_height );
 
-       if( fmt->video.i_frame_rate > 0 &&
-           fmt->video.i_frame_rate_base > 0 )
+
+       if (fmt->video.b_missing_frame_rate)
+       {
+            info_category_AddInfo( p_cat, _("Frame rate"), _("Unknown"));       
+       } 
+       else if (fmt->video.i_frame_rate > 0 && fmt->video.i_frame_rate_base > 0 )
        {
            div = lldiv( (float)fmt->video.i_frame_rate /
                                fmt->video.i_frame_rate_base * 1000000,
