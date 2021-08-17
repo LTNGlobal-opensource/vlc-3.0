@@ -2668,12 +2668,10 @@ static int EsOutControlLocked( es_out_t *out, int i_query, va_list args )
                                 (int)(i_pts_delay/1000) );
 
                         /* Force a rebufferization when we are too late */
-
-                        /* It is not really good, as we throw away already buffered data
+                       /* It is not really good, as we throw away already buffered data
                         * TODO have a mean to correctly reenter bufferization */
                         es_out_Control( out, ES_OUT_RESET_PCR );
                     }
-
                     es_out_SetJitter( out, i_pts_delay_base, i_pts_delay - i_pts_delay_base, p_sys->i_cr_average );
                 }
             }
@@ -3311,8 +3309,12 @@ static void EsOutUpdateInfo( es_out_t *out, es_out_id_t *es, const es_format_t *
             info_category_AddInfo( p_cat, _("Buffer dimensions"), "%ux%u",
                                    fmt->video.i_width, fmt->video.i_height );
 
-       if( fmt->video.i_frame_rate > 0 &&
-           fmt->video.i_frame_rate_base > 0 )
+
+       if (fmt->video.b_missing_frame_rate)
+       {
+            info_category_AddInfo( p_cat, _("Frame rate"), _("Unknown"));       
+       } 
+       else if (fmt->video.i_frame_rate > 0 && fmt->video.i_frame_rate_base > 0 )
        {
            div = lldiv( (float)fmt->video.i_frame_rate /
                                fmt->video.i_frame_rate_base * 1000000,
