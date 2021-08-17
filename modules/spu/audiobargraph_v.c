@@ -291,13 +291,13 @@ static void DrawBar(plane_t *p,
 /*****************************************************************************
  * Draw: creates and returns the bar graph image
  *****************************************************************************/
-static void Draw(BarGraph_t *b, int* pi_graph_width, int* pi_graph_height, mtime_t date)
+static void Draw(BarGraph_t *b, int* pi_graph_width, int* pi_graph_height, int scale_divisor, mtime_t date)
 {
     assert(pi_graph_width != NULL);
     assert(pi_graph_height != NULL);
 
-    int barHeight  = b->barHeight;
-    int barWidth   = b->barWidth;
+    int barHeight  = b->barHeight / scale_divisor;
+    int barWidth   = b->barWidth / scale_divisor;
 
     shared_bargraph_data_t *p_values  = b->p_data;
     if (p_values == NULL)
@@ -489,9 +489,17 @@ static subpicture_t *FilterSub(filter_t *p_filter, mtime_t date)
     if (!p_BarGraph->b_active)
         goto exit;
 
+    int scale_divisor = 1;
+    double font_scale = 1.0;
+    if (var_GetBool(p_filter->obj.libvlc, "hevc_interlaced")) 
+    {
+        scale_divisor = 2;
+        font_scale = 1.5;
+    }
+
     int i_bargraph_width;
     int i_bargraph_height;
-    Draw(p_BarGraph, &i_bargraph_width, &i_bargraph_height, date);
+    Draw(p_BarGraph, &i_bargraph_width, &i_bargraph_height, scale_divisor, date);
     p_pic = p_BarGraph->p_pic;
 
     /* Send an empty subpicture to clear the display when needed */
@@ -529,8 +537,8 @@ static subpicture_t *FilterSub(filter_t *p_filter, mtime_t date)
         p_spu->b_absolute = false;
     }
 
-    p_region->i_x = p_sys->i_pos_x;
-    p_region->i_y = p_sys->i_pos_y;
+    p_region->i_x = p_sys->i_pos_x / scale_divisor;
+    p_region->i_y = p_sys->i_pos_y / scale_divisor;
 
     p_spu->p_region = p_region;
 
@@ -538,17 +546,20 @@ static subpicture_t *FilterSub(filter_t *p_filter, mtime_t date)
 
     const char* text[] = {"10", "20", "30", "40", "50", "60"};
     text_style_t* style = text_style_New();
-    int i_font_width = p_BarGraph->barWidth * 0.5;
-    int i_font_height = p_BarGraph->barWidth * 0.35;
+    int i_font_width = (p_BarGraph->barWidth * 0.5) / font_scale;
+    int i_font_height = (p_BarGraph->barWidth * 0.35) / font_scale;
+    int barHeight  = p_BarGraph->barHeight / scale_divisor;
+
+
     style->i_font_size = i_font_width;
 
     subpicture_region_t* p_current_region = p_region;
     for (int i = 0; i < 6; ++i)
     {
-        int level = iec_scale(-(i+1) * 10) * p_BarGraph->barHeight + 20;
+        int level = iec_scale(-(i+1) * 10) * barHeight + 20;
         subpicture_region_t* spu_txt = subpicture_region_New(&fmt);
-        spu_txt->i_x = p_sys->i_pos_x;
-        spu_txt->i_y = fmt.i_height - level - 4 + p_sys->i_pos_y;
+        spu_txt->i_x = (p_sys->i_pos_x / scale_divisor) - 10;
+        spu_txt->i_y = fmt.i_height - level - 4 + (p_sys->i_pos_y / scale_divisor);
         spu_txt->p_text = text_segment_New(text[i]);
         spu_txt->p_text->style = text_style_Duplicate(style);
         SubAlignText(spu_txt, p_sys->i_pos, i_bargraph_width, i_bargraph_height, i_font_width, i_font_height);
@@ -564,15 +575,15 @@ static subpicture_t *FilterSub(filter_t *p_filter, mtime_t date)
         bargraph_data_t* p_stream =  p_BarGraph->p_data->p_streams[i_stream];
         const char* txt = p_stream->psz_stream_name;
         subpicture_region_t* spu_txt = subpicture_region_New(&fmt);
-        spu_txt->i_x = i_x + p_sys->i_pos_x;
-        spu_txt->i_y = p_BarGraph->barHeight + 20 + p_sys->i_pos_y;
+        spu_txt->i_x = (i_x / scale_divisor) + p_sys->i_pos_x / scale_divisor;
+        spu_txt->i_y = barHeight + 20 + (p_sys->i_pos_y / scale_divisor);
         spu_txt->p_text = text_segment_New(txt);
         spu_txt->p_text->style = text_style_Duplicate(style);
         SubAlignText(spu_txt, p_sys->i_pos, i_bargraph_width, i_bargraph_height,  i_font_width, i_font_height);
 
         p_current_region->p_next = spu_txt;
         p_current_region = spu_txt;
-        i_x += ((p_BarGraph->barWidth + 5 ) * (p_stream->i_nb_channels + 1)) ;
+        i_x += ((p_BarGraph->barWidth + 5 ) * (p_stream->i_nb_channels + 1));
     }
     vlc_mutex_unlock( &p_BarGraph->p_data->mutex );
 

@@ -760,6 +760,15 @@ static const staticentry_t p_list_video[] = {
     B(VLC_CODEC_I444, "Planar 4:4:4 YUV"),
         A("I444"),
 
+    B(VLC_CODEC_CVPX_NV12, "CV Planar YUV 4:2:0"),
+        A("CVPN"),
+
+    B(VLC_CODEC_CVPX_P010, "CV Planar YUV 4:2:0 10-bit LE"),
+        A("CVPP"),
+
+    B(VLC_CODEC_CVPX_BGRA, "CV BGRA 4:2:2 10-bit LE"),
+        A("CVPB"),
+
     B(VLC_CODEC_J420, "Planar 4:2:0 YUV full scale"),
         A("J420"),
     B(VLC_CODEC_J422, "Planar 4:2:2 YUV full scale"),

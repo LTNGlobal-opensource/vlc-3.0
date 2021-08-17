@@ -3330,9 +3330,24 @@ static void EsOutUpdateInfo( es_out_t *out, es_out_id_t *es, const es_format_t *
        {
            const char *psz_chroma_description =
                 vlc_fourcc_GetDescription( VIDEO_ES, fmt->i_codec );
-           if( psz_chroma_description )
+           if( psz_chroma_description &&  psz_chroma_description[0] != '\0')
+           {
                info_category_AddInfo( p_cat, _("Decoded format"), "%s",
                                       psz_chroma_description );
+           }
+           else
+           {
+               uint8_t fc4 = (fmt->i_codec & 0xFF000000) >> 24;
+               uint8_t fc3 = (fmt->i_codec & 0x00FF0000) >> 16;
+               uint8_t fc2 = (fmt->i_codec & 0x0000FF00) >> 8;
+               uint8_t fc1 = (fmt->i_codec & 0xFF);
+
+               char fourcc[32];
+               sprintf(fourcc, "(%08X - %c%c%c%c)", fmt->i_codec, fc1, fc2, fc3, fc4);
+
+               info_category_AddInfo( p_cat, _("Decoded format"), "%s",
+                                      fourcc );
+           }
        }
        {
            static const char orient_names[][13] = {

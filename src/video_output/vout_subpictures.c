@@ -317,7 +317,7 @@ static int spu_scale_w(int v, const spu_scale_t s)
 }
 static int spu_scale_h(int v, const spu_scale_t s)
 {
-    return v * s.h / SCALE_UNIT;
+    return (v * s.h / SCALE_UNIT); 
 }
 static int spu_invscale_w(int v, const spu_scale_t s)
 {
@@ -1547,6 +1547,20 @@ subpicture_t *spu_Render(spu_t *spu,
                                      SubSourceDelProxyCallbacks,
                                      sys->vout);
         filter_chain_Reset(sys->source_chain, NULL, NULL);
+
+        // special case for audiobargraph
+        if (strcmp(chain_update, "audiobargraph_v") == 0)
+        {
+            if (var_Type(spu->obj.libvlc, "hevc_interlaced") == 0)
+            {
+                var_Create(spu->obj.libvlc, "hevc_interlaced", VLC_VAR_BOOL);
+            }
+
+            if (fmt_src->i_visible_height == 540)
+                var_SetBool(spu->obj.libvlc, "hevc_interlaced", true);
+            else
+                var_SetBool(spu->obj.libvlc, "hevc_interlaced", false);
+        }
 
         filter_chain_AppendFromString(spu->p->source_chain, chain_update);
         if (sys->vout)
