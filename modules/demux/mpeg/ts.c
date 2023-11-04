@@ -681,6 +681,13 @@ static int Demux( demux_t *p_demux )
         if( !p_pkt )
             continue;
 
+        /* Disgard packets with no payload */
+        if (i_header == p_demux->p_sys->i_packet_size)
+        {
+            block_Release( p_pkt );
+            continue;
+        }
+
         if( !SCRAMBLED(*p_pid) != !(p_pkt->i_flags & BLOCK_FLAG_SCRAMBLED) )
         {
             UpdatePIDScrambledState( p_demux, p_pid, p_pkt->i_flags & BLOCK_FLAG_SCRAMBLED );
