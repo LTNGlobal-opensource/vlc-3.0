@@ -1095,7 +1095,6 @@ static int DecoderPlayVideo( decoder_t *p_dec, picture_t *p_picture,
     int64_t diff = d2 - now;
     int64_t avdiff = (last_audio_timestamp - p_picture->date);
     int64_t combined_difference = (diff + avdiff);
-    msg_Dbg( p_dec, "video d1=%"PRId64", d2=%"PRId64", now=%"PRId64" (diff=%"PRId64") (avdiff=%"PRId64") (combined=%"PRId64")", d1, d2, now, diff, avdiff, combined_difference);
     
     if (p_dec->b_low_latency) 
     {
