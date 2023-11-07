@@ -1262,7 +1262,6 @@ static int DecoderPlayAudio( decoder_t *p_dec, block_t *p_audio,
     mtime_t d2 = p_audio->i_pts;
     mtime_t now = mdate();
     int64_t diff = d2 - now;
-    msg_Dbg( p_dec, "audio d1=%"PRId64", d2=%"PRId64", now=%"PRId64" (diff=%"PRId64")", d1, d2, now, diff);
 
     audio_output_t *p_aout = p_owner->p_aout;
 
