@@ -381,7 +381,6 @@ static int  decoder_queue_audio( decoder_t * p_dec, block_t * block_in)
     //don't leak is nobody is consuming the fifo
     if ( vlc_fifo_GetCount(data->p_fifo) > 100 )
     {
-        msg_Dbg(p_dec, "Drop peak data");
         block_t* block_tmp = vlc_fifo_DequeueUnlocked(data->p_fifo);
         block_Release(block_tmp);
     }
