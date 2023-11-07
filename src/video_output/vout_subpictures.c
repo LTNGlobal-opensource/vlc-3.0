@@ -1064,8 +1064,6 @@ static subpicture_t *SpuRenderSubpictures(spu_t *spu,
                 msg_Err(spu, "original picture size %dx%d is unsupported",
                          subpic->i_original_picture_width,
                          subpic->i_original_picture_height);
-            else
-                msg_Warn(spu, "original picture size is undefined");
 
             subpic->i_original_picture_width  = fmt_src->i_visible_width;
             subpic->i_original_picture_height = fmt_src->i_visible_height;
