@@ -1435,7 +1435,6 @@ static int OpenDecoder(vlc_object_t *p_this)
             p_sys->pf_get_extradata = GetDecoderExtradataH264;
             p_sys->pf_fill_reorder_info = FillReorderInfoH264;
             p_sys->b_poc_based_reorder = true;
-            p_sys->b_vt_need_keyframe = true;
             break;
 
         case kCMVideoCodecType_HEVC:
@@ -1449,7 +1448,7 @@ static int OpenDecoder(vlc_object_t *p_this)
             p_sys->pf_get_extradata = GetDecoderExtradataHEVC;
             p_sys->pf_fill_reorder_info = FillReorderInfoHEVC;
             p_sys->b_poc_based_reorder = true;
-            p_sys->b_vt_need_keyframe = true;
+            //p_sys->b_vt_need_keyframe = true;
             break;
 
         case kCMVideoCodecType_MPEG4Video:
