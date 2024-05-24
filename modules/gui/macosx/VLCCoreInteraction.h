@@ -72,6 +72,7 @@
 - (void)volumeUp;
 - (void)volumeDown;
 - (void)toggleMute;
+- (void)toggleBargraph;
 - (void)showPosition;
 - (void)startListeningWithAppleRemote;
 - (void)stopListeningWithAppleRemote;
