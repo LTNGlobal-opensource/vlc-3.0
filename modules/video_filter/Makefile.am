@@ -32,6 +32,7 @@ libgrain_plugin_la_SOURCES = video_filter/grain.c
 libgrain_plugin_la_LIBADD = $(LIBM)
 libhqdn3d_plugin_la_SOURCES = video_filter/hqdn3d.c video_filter/hqdn3d.h
 libhqdn3d_plugin_la_LIBADD = $(LIBM)
+libhevccombiner_plugin_la_SOURCES = video_filter/hevc_combiner.c
 libinvert_plugin_la_SOURCES = video_filter/invert.c
 libmagnify_plugin_la_SOURCES = video_filter/magnify.c
 libmirror_plugin_la_SOURCES = video_filter/mirror.c
@@ -82,6 +83,7 @@ video_filter_LTLIBRARIES = \
 	libgradient_plugin.la \
 	libgrain_plugin.la \
 	libgaussianblur_plugin.la \
+	libhevccombiner_plugin.la \
 	libinvert_plugin.la \
 	libmagnify_plugin.la \
 	libmirror_plugin.la \
