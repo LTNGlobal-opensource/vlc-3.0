@@ -1,14 +1,14 @@
 <?xml version="1.0" encoding="UTF-8"?>
-<document type="com.apple.InterfaceBuilder3.Cocoa.XIB" version="3.0" toolsVersion="14313.13.2" targetRuntime="MacOSX.Cocoa" propertyAccessControl="none" useAutolayout="YES">
+<document type="com.apple.InterfaceBuilder3.Cocoa.XIB" version="3.0" toolsVersion="16097" targetRuntime="MacOSX.Cocoa" propertyAccessControl="none" useAutolayout="YES">
     <dependencies>
-        <deployment identifier="macosx"/>
-        <plugIn identifier="com.apple.InterfaceBuilder.CocoaPlugin" version="14313.13.2"/>
+        <plugIn identifier="com.apple.InterfaceBuilder.CocoaPlugin" version="16097"/>
         <capability name="documents saved in the Xcode 8 format" minToolsVersion="8.0"/>
     </dependencies>
     <objects>
         <customObject id="-2" userLabel="File's Owner" customClass="VLCAboutWindowController">
             <connections>
                 <outlet property="o_authors_btn" destination="2286" id="2323"/>
+                <outlet property="o_changeset_field" destination="idz-rh-ggp" id="T76-8Y-j6Y"/>
                 <outlet property="o_copyright_field" destination="2233" id="2320"/>
                 <outlet property="o_credits_btn" destination="2290" id="2325"/>
                 <outlet property="o_credits_scrollview" destination="1348" id="2333"/>
@@ -29,7 +29,7 @@
             <windowStyleMask key="styleMask" titled="YES" closable="YES" miniaturizable="YES"/>
             <windowPositionMask key="initialPositionMask" leftStrut="YES" rightStrut="YES" topStrut="YES" bottomStrut="YES"/>
             <rect key="contentRect" x="173" y="74" width="721" height="356"/>
-            <rect key="screenRect" x="0.0" y="0.0" width="1920" height="1177"/>
+            <rect key="screenRect" x="0.0" y="0.0" width="1792" height="1097"/>
             <value key="minSize" type="size" width="231.86799999999999" height="107"/>
             <view key="contentView" id="1344">
                 <rect key="frame" x="0.0" y="0.0" width="721" height="356"/>
@@ -76,32 +76,41 @@
                         </constraints>
                         <imageCell key="cell" refusesFirstResponder="YES" alignment="left" imageScaling="proportionallyUpOrDown" image="VLC" id="2269"/>
                     </imageView>
-                    <textField verticalHuggingPriority="750" misplaced="YES" allowsCharacterPickerTouchBarItem="YES" translatesAutoresizingMaskIntoConstraints="NO" id="2232">
-                        <rect key="frame" x="269" y="274" width="248" height="16"/>
+                    <textField verticalHuggingPriority="750" allowsCharacterPickerTouchBarItem="YES" translatesAutoresizingMaskIntoConstraints="NO" id="2232">
+                        <rect key="frame" x="269" y="289" width="432" height="16"/>
+                        <constraints>
+                            <constraint firstAttribute="width" constant="428" id="v65-e7-RMC"/>
+                        </constraints>
                         <textFieldCell key="cell" scrollable="YES" lineBreakMode="clipping" selectable="YES" sendsActionOnEndEditing="YES" state="on" alignment="left" title="Version 0.9.0-svn Grischenko (PPC/x86)" id="2270">
                             <font key="font" metaFont="systemBold" size="12"/>
                             <color key="textColor" name="tertiaryLabelColor" catalog="System" colorSpace="catalog"/>
                             <color key="backgroundColor" name="textBackgroundColor" catalog="System" colorSpace="catalog"/>
                         </textFieldCell>
                     </textField>
-                    <textField verticalHuggingPriority="750" allowsCharacterPickerTouchBarItem="YES" translatesAutoresizingMaskIntoConstraints="NO" id="2233">
-                        <rect key="frame" x="269" y="255" width="221" height="13"/>
+                    <textField verticalHuggingPriority="750" misplaced="YES" allowsCharacterPickerTouchBarItem="YES" translatesAutoresizingMaskIntoConstraints="NO" id="2233">
+                        <rect key="frame" x="269" y="255" width="432" height="13"/>
                         <textFieldCell key="cell" scrollable="YES" lineBreakMode="clipping" selectable="YES" sendsActionOnEndEditing="YES" state="on" alignment="left" title="Copyright (c) 1997-2008 the VideoLAN team" id="2271">
                             <font key="font" metaFont="label"/>
                             <color key="textColor" name="tertiaryLabelColor" catalog="System" colorSpace="catalog"/>
                             <color key="backgroundColor" name="textBackgroundColor" catalog="System" colorSpace="catalog"/>
                         </textFieldCell>
                     </textField>
-                    <textField verticalHuggingPriority="750" horizontalCompressionResistancePriority="250" misplaced="YES" allowsCharacterPickerTouchBarItem="YES" translatesAutoresizingMaskIntoConstraints="NO" id="2234">
-                        <rect key="frame" x="269" y="241" width="338" height="13"/>
+                    <textField verticalHuggingPriority="750" horizontalCompressionResistancePriority="250" allowsCharacterPickerTouchBarItem="YES" translatesAutoresizingMaskIntoConstraints="NO" id="2234">
+                        <rect key="frame" x="269" y="241" width="432" height="13"/>
+                        <constraints>
+                            <constraint firstAttribute="width" constant="428" id="QXo-xo-pj5"/>
+                        </constraints>
                         <textFieldCell key="cell" selectable="YES" sendsActionOnEndEditing="YES" state="on" alignment="left" title="Compiled by fpk with llvm-gcc 4.2.1 (Based on Apple Inc. build 5658)" id="2272">
                             <font key="font" metaFont="label"/>
                             <color key="textColor" name="tertiaryLabelColor" catalog="System" colorSpace="catalog"/>
                             <color key="backgroundColor" name="textBackgroundColor" catalog="System" colorSpace="catalog"/>
                         </textFieldCell>
                     </textField>
-                    <textField verticalHuggingPriority="750" horizontalCompressionResistancePriority="250" misplaced="YES" allowsCharacterPickerTouchBarItem="YES" translatesAutoresizingMaskIntoConstraints="NO" id="2235">
+                    <textField verticalHuggingPriority="750" horizontalCompressionResistancePriority="250" allowsCharacterPickerTouchBarItem="YES" translatesAutoresizingMaskIntoConstraints="NO" id="2235">
                         <rect key="frame" x="269" y="304" width="192" height="29"/>
+                        <constraints>
+                            <constraint firstAttribute="width" constant="188" id="py7-5G-rPp"/>
+                        </constraints>
                         <textFieldCell key="cell" selectable="YES" sendsActionOnEndEditing="YES" alignment="left" title="VLC media player" id="2273">
                             <font key="font" metaFont="system" size="24"/>
                             <color key="textColor" name="controlTextColor" catalog="System" colorSpace="catalog"/>
@@ -115,7 +124,7 @@
                             <constraint firstAttribute="height" constant="145" id="fep-cE-yaO"/>
                         </constraints>
                         <textFieldCell key="cell" sendsActionOnEndEditing="YES" allowsEditingTextAttributes="YES" id="2285">
-                            <font key="font" metaFont="system"/>
+                            <font key="font" metaFont="message"/>
                             <string key="title">VLC media player is a free and open source media player, encoder and streamer made by the volunteers of the VideoLAN community.
 VLC uses its internal codecs and works on essentially every popular platform and can read almost every files, CDs, DVDs, network streams, capture cards and other media formats!
 Help and join us!.</string>
@@ -133,7 +142,7 @@ Help and join us!.</string>
                                     <rect key="frame" x="509" y="51" width="48" height="17"/>
                                     <buttonCell key="cell" type="smallSquare" title="Credits" bezelStyle="smallSquare" imagePosition="overlaps" alignment="center" state="on" imageScaling="proportionallyDown" inset="2" id="2291">
                                         <behavior key="behavior" pushIn="YES" lightByBackground="YES" lightByGray="YES"/>
-                                        <font key="font" metaFont="system"/>
+                                        <font key="font" metaFont="message"/>
                                     </buttonCell>
                                     <connections>
                                         <action selector="buttonAction:" target="-2" id="2330"/>
@@ -143,7 +152,7 @@ Help and join us!.</string>
                                     <rect key="frame" x="184" y="51" width="52" height="17"/>
                                     <buttonCell key="cell" type="smallSquare" title="Authors" bezelStyle="smallSquare" imagePosition="overlaps" alignment="center" state="on" imageScaling="proportionallyDown" inset="2" id="2287">
                                         <behavior key="behavior" pushIn="YES" lightByBackground="YES" lightByGray="YES"/>
-                                        <font key="font" metaFont="system"/>
+                                        <font key="font" metaFont="message"/>
                                     </buttonCell>
                                     <connections>
                                         <action selector="buttonAction:" target="-2" id="2328"/>
@@ -153,26 +162,29 @@ Help and join us!.</string>
                                     <rect key="frame" x="347" y="51" width="51" height="17"/>
                                     <buttonCell key="cell" type="smallSquare" title="License" bezelStyle="smallSquare" imagePosition="overlaps" alignment="center" state="on" imageScaling="proportionallyDown" inset="2" id="2289">
                                         <behavior key="behavior" pushIn="YES" lightByBackground="YES" lightByGray="YES"/>
-                                        <font key="font" metaFont="system"/>
+                                        <font key="font" metaFont="message"/>
                                     </buttonCell>
                                     <connections>
                                         <action selector="buttonAction:" target="-2" id="2329"/>
                                     </connections>
                                 </button>
-                                <textField verticalHuggingPriority="750" misplaced="YES" allowsCharacterPickerTouchBarItem="YES" translatesAutoresizingMaskIntoConstraints="NO" id="2314">
+                                <textField verticalHuggingPriority="750" allowsCharacterPickerTouchBarItem="YES" translatesAutoresizingMaskIntoConstraints="NO" id="2314">
                                     <rect key="frame" x="181" y="20" width="383" height="13"/>
                                     <textFieldCell key="cell" scrollable="YES" lineBreakMode="clipping" sendsActionOnEndEditing="YES" alignment="center" title="VLC media player and VideoLAN are trademarks of the VideoLAN Association." id="2315">
-                                        <font key="font" metaFont="system" size="10"/>
+                                        <font key="font" metaFont="label"/>
                                         <color key="textColor" name="secondaryLabelColor" catalog="System" colorSpace="catalog"/>
                                         <color key="backgroundColor" name="controlColor" catalog="System" colorSpace="catalog"/>
                                     </textFieldCell>
                                 </textField>
                             </subviews>
                             <constraints>
-                                <constraint firstItem="2314" firstAttribute="centerX" secondItem="Ioe-L7-TBi" secondAttribute="centerX" id="IwG-XP-5i3"/>
+                                <constraint firstItem="2314" firstAttribute="centerX" secondItem="Ioe-L7-TBi" secondAttribute="centerX" constant="2" id="IwG-XP-5i3"/>
+                                <constraint firstItem="2286" firstAttribute="baseline" secondItem="2288" secondAttribute="baseline" id="JGV-zK-iLm"/>
+                                <constraint firstItem="2288" firstAttribute="baseline" secondItem="2290" secondAttribute="baseline" id="QdY-qx-i3w"/>
                                 <constraint firstItem="2288" firstAttribute="top" secondItem="Ioe-L7-TBi" secondAttribute="top" constant="16" id="RYq-jL-Ywn"/>
-                                <constraint firstAttribute="bottom" secondItem="2314" secondAttribute="bottom" constant="24" id="Vdg-Og-uy9"/>
+                                <constraint firstAttribute="bottom" secondItem="2314" secondAttribute="bottom" constant="20" id="Vdg-Og-uy9"/>
                                 <constraint firstItem="2290" firstAttribute="leading" secondItem="2288" secondAttribute="trailing" constant="111" id="aX6-JU-nd5"/>
+                                <constraint firstItem="2314" firstAttribute="top" secondItem="2286" secondAttribute="bottom" constant="18" id="fs4-wg-XsV"/>
                                 <constraint firstItem="2288" firstAttribute="centerX" secondItem="Ioe-L7-TBi" secondAttribute="centerX" id="igh-uW-5sf"/>
                                 <constraint firstItem="2286" firstAttribute="centerY" secondItem="2288" secondAttribute="centerY" id="n2O-oF-3c7"/>
                                 <constraint firstItem="2288" firstAttribute="leading" secondItem="2286" secondAttribute="trailing" constant="111" id="rsV-16-ydW"/>
@@ -184,22 +196,38 @@ Help and join us!.</string>
                             <constraint firstAttribute="height" constant="84" id="OTP-sG-AIS"/>
                         </constraints>
                     </box>
+                    <textField horizontalHuggingPriority="251" verticalHuggingPriority="750" translatesAutoresizingMaskIntoConstraints="NO" id="idz-rh-ggp">
+                        <rect key="frame" x="269" y="273" width="434" height="14"/>
+                        <constraints>
+                            <constraint firstAttribute="width" constant="430" id="UCf-cK-Ac1"/>
+                        </constraints>
+                        <textFieldCell key="cell" lineBreakMode="clipping" alignment="left" title="changeset label" id="woQ-SP-oss">
+                            <font key="font" size="12" name="HelveticaNeue"/>
+                            <color key="textColor" name="tertiaryLabelColor" catalog="System" colorSpace="catalog"/>
+                            <color key="backgroundColor" name="textBackgroundColor" catalog="System" colorSpace="catalog"/>
+                        </textFieldCell>
+                    </textField>
                 </subviews>
                 <constraints>
                     <constraint firstItem="1348" firstAttribute="top" secondItem="2233" secondAttribute="bottom" constant="-37" id="01p-3E-W4t"/>
                     <constraint firstItem="2231" firstAttribute="top" secondItem="1344" secondAttribute="top" constant="23" id="0iQ-yP-dzK"/>
                     <constraint firstItem="1348" firstAttribute="top" secondItem="1344" secondAttribute="top" constant="64" id="5GI-Qj-1gl"/>
                     <constraint firstItem="1348" firstAttribute="leading" secondItem="2231" secondAttribute="trailing" constant="11" id="9zZ-1W-0Z8"/>
-                    <constraint firstItem="1348" firstAttribute="top" secondItem="2232" secondAttribute="bottom" constant="-18" id="GW6-JC-Ely"/>
+                    <constraint firstItem="2232" firstAttribute="top" secondItem="2235" secondAttribute="bottom" constant="-1" id="CH9-CU-pab"/>
+                    <constraint firstItem="1348" firstAttribute="top" secondItem="2232" secondAttribute="bottom" constant="-3" id="GW6-JC-Ely"/>
                     <constraint firstAttribute="trailing" secondItem="1348" secondAttribute="trailing" constant="20" id="H3r-VZ-85w"/>
                     <constraint firstAttribute="bottom" secondItem="2313" secondAttribute="bottom" constant="-5" id="Ian-FJ-q76"/>
                     <constraint firstItem="2284" firstAttribute="centerX" secondItem="1348" secondAttribute="centerX" id="JLu-H9-741"/>
                     <constraint firstItem="2313" firstAttribute="centerX" secondItem="1344" secondAttribute="centerX" id="Kkg-4g-1ft"/>
+                    <constraint firstItem="1348" firstAttribute="top" secondItem="idz-rh-ggp" secondAttribute="bottom" constant="-19" id="LiB-o1-1mG"/>
+                    <constraint firstAttribute="trailing" secondItem="idz-rh-ggp" secondAttribute="trailing" constant="20" id="MfJ-8a-Ea5"/>
                     <constraint firstItem="2234" firstAttribute="leading" secondItem="1348" secondAttribute="leading" id="O3r-hG-9g7"/>
                     <constraint firstItem="2233" firstAttribute="leading" secondItem="1348" secondAttribute="leading" id="R7a-c5-efq"/>
                     <constraint firstItem="1348" firstAttribute="top" secondItem="2234" secondAttribute="bottom" constant="-51" id="RNx-TW-cJ2"/>
+                    <constraint firstItem="2235" firstAttribute="top" secondItem="2231" secondAttribute="top" id="ZlI-ua-tHd"/>
                     <constraint firstItem="1348" firstAttribute="top" secondItem="2235" secondAttribute="bottom" constant="12" id="ZoH-bW-QD1"/>
                     <constraint firstItem="2232" firstAttribute="leading" secondItem="1348" secondAttribute="leading" id="bmT-0q-ETw"/>
+                    <constraint firstItem="2234" firstAttribute="top" secondItem="2233" secondAttribute="bottom" constant="1" id="cGn-lr-wow"/>
                     <constraint firstItem="2235" firstAttribute="leading" secondItem="1348" secondAttribute="leading" id="lQQ-YJ-62H"/>
                     <constraint firstItem="2284" firstAttribute="top" secondItem="1348" secondAttribute="bottom" constant="-145" id="nK9-Kg-9Ut"/>
                     <constraint firstItem="2231" firstAttribute="leading" secondItem="1344" secondAttribute="leading" constant="20" id="uWE-0X-Z9i"/>
@@ -208,6 +236,7 @@ Help and join us!.</string>
             <connections>
                 <outlet property="delegate" destination="-2" id="2332"/>
             </connections>
+            <point key="canvasLocation" x="139.5" y="147"/>
         </window>
     </objects>
     <resources>

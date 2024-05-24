@@ -185,6 +185,11 @@ void vout_display_GetDefaultDisplaySize(unsigned *width, unsigned *height,
         *width = *height;
         *height = store;
     }
+
+    /* work around for interlaced HEVC content, which would give a half height window */
+    if (source->i_height == 540 || source->i_height == 240 || source->i_height == 288) {
+        *height = (*height) * 2;
+    }
 }
 
 /* */

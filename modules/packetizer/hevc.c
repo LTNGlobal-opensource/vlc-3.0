@@ -768,6 +768,9 @@ static block_t * ParseAUHead(decoder_t *p_dec, uint8_t i_nal_type, block_t *p_na
         case HEVC_NAL_SPS:
         case HEVC_NAL_PPS:
         {
+            if (!p_sys->b_init_sequence_complete) {
+                p_sys->b_init_sequence_complete = var_InheritBool(p_dec, "accept-hevc-intra");
+            }
             uint8_t i_id;
             const uint8_t *p_xps = p_nalb->p_buffer;
             size_t i_xps = p_nalb->i_buffer;

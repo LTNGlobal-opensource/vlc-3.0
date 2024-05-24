@@ -107,6 +107,7 @@ libmacosx_plugin_la_SOURCES = \
 	gui/macosx/VLCVolumeSlider.h gui/macosx/VLCVolumeSlider.m \
 	gui/macosx/VLCVolumeSliderCell.h gui/macosx/VLCVolumeSliderCell.m \
 	gui/macosx/VLCWrappableTextField.h gui/macosx/VLCWrappableTextField.m \
+	../src/revision.c \
 	gui/macosx/VLCRemoteControlService.h gui/macosx/VLCRemoteControlService.m
 
 # PXSourceList sources
