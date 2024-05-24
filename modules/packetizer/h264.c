@@ -243,6 +243,11 @@ static void ActivateSets( decoder_t *p_dec, const h264_sequence_parameter_set_t 
             /* else use the default num/den */
             p_dec->fmt_out.video.i_frame_rate = p_sys->dts.i_divider_num >> 1; /* num_clock_ts == 2 */
             p_dec->fmt_out.video.i_frame_rate_base = p_sys->dts.i_divider_den;
+            p_dec->fmt_out.video.b_missing_frame_rate = false;
+        }
+        else
+        {
+            p_dec->fmt_out.video.b_missing_frame_rate = true;
         }
 
         if( p_dec->fmt_in.video.primaries == COLOR_PRIMARIES_UNDEF )
