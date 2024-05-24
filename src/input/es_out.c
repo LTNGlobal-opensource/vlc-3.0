@@ -3524,6 +3524,68 @@ static void EsOutUpdateInfo( es_out_t *out, es_out_id_t *es, const es_format_t *
            info_category_AddInfo( p_cat, "MaxFALL", "%d cd/m²",
                                   fmt->video.lighting.MaxFALL );
        }
+       if (es->p_dec)
+       {
+            switch ( es->p_dec->fmt_out.video.i_interlaced) {
+            case INTERLACED_INTERLACED_UNKNOWN:
+                info_category_AddInfo( p_cat, _("Field Order"), _("Interlaced Unknown") );
+                break;
+            case INTERLACED_INTERLACED_TOP_FIRST:
+                info_category_AddInfo( p_cat, _("Field Order"), _("Interlaced Top First") );
+                break;
+            case INTERLACED_INTERLACED_BOTTOM_FIRST:
+                info_category_AddInfo( p_cat, _("Field Order"), _("Interlaced Bottom First") );
+                break;
+            case INTERLACED_INTERLACED_TOP_BOTTOM_TOP:
+                info_category_AddInfo( p_cat, _("Field Order"), _("Interlaced Top Bottom Top") );
+                break;
+            case INTERLACED_INTERLACED_BOTTOM_TOP_BOTTOM:
+                info_category_AddInfo( p_cat, _("Field Order"), _("Interlaced Bottom Top Bottom") );
+                break;
+            case INTERLACED_PROGRESSIVE:
+                info_category_AddInfo( p_cat, _("Field Order"), _("Progressive") );
+                break;
+            default:
+                break;
+            }
+#define AFD_FORMAT(id, format) \
+    case id:\
+       info_category_AddInfo( p_cat, _("Active Format Description"),  _(format) ); \
+    break
+            if ( fmt->video.b_afdpresent )
+                switch ( fmt->video.i_afd ) {
+                AFD_FORMAT(0x0, "[0000] Unknown");
+                AFD_FORMAT(0x2, "[0010] 16:9 (top)");
+                AFD_FORMAT(0x3, "[0011] 14:9 (top)");
+                AFD_FORMAT(0x4, "[0100] > 16:9 (centre)");
+                AFD_FORMAT(0x8, "[1000] As the coded frame");
+                AFD_FORMAT(0x9, "[1001] 4:3 (centre)");
+                AFD_FORMAT(0xA, "[1010] 16:9 (centre)");
+                AFD_FORMAT(0xB, "[1011] 14:9 (top)");
+                AFD_FORMAT(0xD, "[1101] 4:3 (with shoot and protect 14:9 centre)");
+                AFD_FORMAT(0xE, "[1110] 16:9 (with shoot and protect 14:9 centre)");
+                AFD_FORMAT(0xF, "[1111] 16:9 (with shoot and protect  4:3 centre)");
+                default:
+                    info_category_AddInfo( p_cat, _("AFD"),  _("[%c%c%c%c] Reserved"),
+                                           (es->p_dec->fmt_out.video.i_afd & 8) ? '1' : '0',
+                                           (es->p_dec->fmt_out.video.i_afd & 4) ? '1' : '0',
+                                           (es->p_dec->fmt_out.video.i_afd & 2) ? '1' : '0',
+                                           (es->p_dec->fmt_out.video.i_afd & 1) ? '1' : '0');
+                    break;
+                }
+#undef AFD_FORMAT
+            if ( fmt->video.bardata.b_present )
+            {
+                if ( fmt->video.bardata.i_end_of_top_bar != -1 )
+                    info_category_AddInfo( p_cat, _("End of top bar (px)"), "%i", fmt->video.bardata.i_end_of_top_bar );
+                if ( fmt->video.bardata.i_start_of_bottom_bar != -1 )
+                    info_category_AddInfo( p_cat, _("Start of bottom bar (px)"), "%i", fmt->video.bardata.i_start_of_bottom_bar );
+                if ( fmt->video.bardata.i_end_of_left_bar != -1 )
+                    info_category_AddInfo( p_cat, _("End of left bar (px)"), "%i", fmt->video.bardata.i_end_of_left_bar );
+                if ( fmt->video.bardata.i_start_of_right_bar != -1 )
+                    info_category_AddInfo( p_cat, _("Start of right bar (px)"), "%i", fmt->video.bardata.i_start_of_right_bar );
+            }
+       }
        break;
 
     case SPU_ES:
