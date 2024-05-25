@@ -35,7 +35,7 @@
 
 #import "VLCScrollingClipView.h"
 
-#ifdef __x86_64__
+
 #define PLATFORM "Intel 64bit"
 
 const char * get_revision(void)
