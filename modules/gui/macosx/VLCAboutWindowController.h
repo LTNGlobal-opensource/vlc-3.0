@@ -28,6 +28,7 @@
 {
     /* main about panel and stuff related to its views */
     IBOutlet id o_name_version_field;
+    IBOutlet id o_changeset_field;
     IBOutlet id o_revision_field;
     IBOutlet id o_copyright_field;
     IBOutlet id o_credits_textview;

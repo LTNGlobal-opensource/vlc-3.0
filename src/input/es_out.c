@@ -95,6 +95,7 @@ struct es_out_id_t
     decoder_t   *p_dec_record;
 
     vlc_tick_t  i_pts_level;
+	decoder_t   *p_dec_stream; /* decoder for parallel streaming */
 
     /* Fields for Video with CC */
     struct
@@ -178,6 +179,9 @@ struct es_out_sys_t
     /* Record */
     sout_instance_t *p_sout_record;
 
+    /* */
+    sout_instance_t *p_sout_stream;
+
     /* Used only to limit debugging output */
     int         i_prev_stream_level;
 };
@@ -196,6 +200,7 @@ static int          EsOutSetRecord(  es_out_t *, bool b_record );
 static bool EsIsSelected( es_out_id_t *es );
 static void EsSelect( es_out_t *out, es_out_id_t *es );
 static void EsDeleteInfo( es_out_t *, es_out_id_t *es );
+static void EsDestroyDecoderStream( es_out_t *out, es_out_id_t *p_es );
 static void EsUnselect( es_out_t *out, es_out_id_t *es, bool b_update );
 static void EsOutDecoderChangeDelay( es_out_t *out, es_out_id_t *p_es );
 static void EsOutDecodersChangePause( es_out_t *out, bool b_paused, vlc_tick_t i_date );
@@ -372,6 +377,9 @@ static void EsOutTerminate( es_out_t *out )
         if( p_sys->es[i]->p_dec )
             input_DecoderDelete( p_sys->es[i]->p_dec );
 
+        if( p_sys->es[i]->p_dec_stream )
+            input_DecoderDelete( p_sys->es[i]->p_dec_stream );
+
         free( p_sys->es[i]->psz_language );
         free( p_sys->es[i]->psz_language_code );
         es_format_Clean( &p_sys->es[i]->fmt );
@@ -379,6 +387,12 @@ static void EsOutTerminate( es_out_t *out )
         free( p_sys->es[i] );
     }
     TAB_CLEAN( p_sys->i_es, p_sys->es );
+
+    if ( p_sys->p_sout_stream )
+    {
+        sout_DeleteInstance( p_sys->p_sout_stream );
+        p_sys->p_sout_stream = NULL;
+    }
 
     /* FIXME duplicate work EsOutProgramDel (but we cannot use it) add a EsOutProgramClean ? */
     for( int i = 0; i < p_sys->i_pgrm; i++ )
@@ -456,6 +470,8 @@ static bool EsOutDecodersIsEmpty( es_out_t *out )
         if( es->p_dec && !input_DecoderIsEmpty( es->p_dec ) )
             return false;
         if( es->p_dec_record && !input_DecoderIsEmpty( es->p_dec_record ) )
+            return false;
+        if( es->p_dec_stream && !input_DecoderIsEmpty( es->p_dec_stream ) )
             return false;
     }
     return true;
@@ -638,7 +654,14 @@ static void EsOutChangePosition( es_out_t *out )
                     input_DecoderStartWait( p_es->p_dec_record );
             }
         }
+		if( p_es->p_dec_stream != NULL )
+        {
+            input_DecoderFlush( p_es->p_dec_stream );
+            if( !p_sys->b_buffering )
+                input_DecoderStartWait( p_es->p_dec_stream );
+        }
         p_es->i_pts_level = VLC_TICK_INVALID;
+
     }
 
     for( int i = 0; i < p_sys->i_pgrm; i++ ) {
@@ -713,12 +736,14 @@ static void EsOutDecodersStopBuffering( es_out_t *out, bool b_forced )
     for( int i = 0; i < p_sys->i_es; i++ )
     {
         es_out_id_t *p_es = p_sys->es[i];
-
-        if( !p_es->p_dec || p_es->fmt.i_cat == SPU_ES )
+        if (p_es->fmt.i_cat == SPU_ES)
             continue;
-        input_DecoderWait( p_es->p_dec );
+        if( p_es->p_dec )
+            input_DecoderWait( p_es->p_dec );
         if( p_es->p_dec_record )
             input_DecoderWait( p_es->p_dec_record );
+        if( p_es->p_dec_stream )
+            input_DecoderWait( p_es->p_dec_stream );
     }
 
     msg_Dbg( p_sys->p_input, "Decoder wait done in %d ms",
@@ -738,12 +763,14 @@ static void EsOutDecodersStopBuffering( es_out_t *out, bool b_forced )
     {
         es_out_id_t *p_es = p_sys->es[i];
 
-        if( !p_es->p_dec )
-            continue;
+        if( p_es->p_dec )
+             input_DecoderStopWait( p_es->p_dec );
 
-        input_DecoderStopWait( p_es->p_dec );
         if( p_es->p_dec_record )
             input_DecoderStopWait( p_es->p_dec_record );
+
+        if( p_es->p_dec_stream )
+            input_DecoderStopWait( p_es->p_dec_stream );
     }
 }
 static void EsOutDecodersChangePause( es_out_t *out, bool b_paused, vlc_tick_t i_date )
@@ -756,11 +783,11 @@ static void EsOutDecodersChangePause( es_out_t *out, bool b_paused, vlc_tick_t i
         es_out_id_t *es = p_sys->es[i];
 
         if( es->p_dec )
-        {
             input_DecoderChangePause( es->p_dec, b_paused, i_date );
-            if( es->p_dec_record )
-                input_DecoderChangePause( es->p_dec_record, b_paused, i_date );
-        }
+        if( es->p_dec_record )
+            input_DecoderChangePause( es->p_dec_record, b_paused, i_date );
+        if( es->p_dec_stream )
+            input_DecoderChangePause( es->p_dec_stream, b_paused, i_date );
     }
 }
 
@@ -777,6 +804,8 @@ static bool EsOutIsExtraBufferingAllowed( es_out_t *out )
             i_size += input_DecoderGetFifoSize( p_es->p_dec );
         if( p_es->p_dec_record )
             i_size += input_DecoderGetFifoSize( p_es->p_dec_record );
+        if( p_es->p_dec_stream )
+            i_size += input_DecoderGetFifoSize( p_es->p_dec_stream );
     }
     //msg_Info( out, "----- EsOutIsExtraBufferingAllowed =% 5d KiB -- ", i_size / 1024 );
 
@@ -813,6 +842,8 @@ static void EsOutDecoderChangeDelay( es_out_t *out, es_out_id_t *p_es )
         input_DecoderChangeDelay( p_es->p_dec, i_delay );
     if( p_es->p_dec_record )
         input_DecoderChangeDelay( p_es->p_dec_record, i_delay );
+    if( p_es->p_dec_stream )
+        input_DecoderChangeDelay( p_es->p_dec_stream, i_delay );
 }
 static void EsOutProgramsChangeRate( es_out_t *out )
 {
@@ -1007,9 +1038,14 @@ static void EsOutProgramSelect( es_out_t *out, es_out_pgrm_t *p_pgrm )
 
         for( i = 0; i < p_sys->i_es; i++ )
         {
-            if( p_sys->es[i]->p_pgrm == old && EsIsSelected( p_sys->es[i] ) &&
+            if( p_sys->es[i]->p_pgrm == old &&
                 p_sys->i_mode != ES_OUT_MODE_ALL )
-                EsUnselect( out, p_sys->es[i], true );
+            {
+                if (EsIsSelected( p_sys->es[i] ))
+                    EsUnselect( out, p_sys->es[i], true );
+                if (p_sys->es[i]->p_dec_stream)
+                    EsDestroyDecoderStream(out, p_sys->es[i]);
+            }
         }
 
         p_sys->audio.p_main_es = NULL;
@@ -1625,6 +1661,7 @@ static es_out_id_t *EsOutAddSlave( es_out_t *out, const es_format_t *fmt, es_out
     es->psz_language_code = LanguageGetCode( es->fmt.psz_language );
     es->p_dec = NULL;
     es->p_dec_record = NULL;
+    es->p_dec_stream = NULL;
     es->cc.type = 0;
     es->cc.i_bitmap = 0;
     es->p_master = p_master;
@@ -1672,6 +1709,31 @@ static bool EsIsSelected( es_out_id_t *es )
         return es->p_dec != NULL;
     }
 }
+
+
+static bool EsIsSelectedOrStreaming( es_out_id_t *es )
+{
+     return EsIsSelected(es) || es->p_dec_stream != NULL ;
+}
+
+
+static void EsCreateDecoderStream( es_out_t *out, es_out_id_t *p_es )
+{
+    es_out_sys_t   *p_sys = out->p_sys;
+    input_thread_t *p_input = p_sys->p_input;
+    if ( p_es->p_dec_stream )
+        return ;
+    if( p_sys->p_sout_stream )
+    {
+        p_es->p_dec_stream = input_DecoderNew( p_input, &p_es->fmt, p_es->p_pgrm->p_clock, p_sys->p_sout_stream );
+        if( p_es->p_dec_stream && p_sys->b_buffering )
+            input_DecoderStartWait( p_es->p_dec_stream );
+    }
+
+
+    EsOutDecoderChangeDelay( out, p_es );
+}
+
 static void EsCreateDecoder( es_out_t *out, es_out_id_t *p_es )
 {
     es_out_sys_t   *p_sys = out->p_sys;
@@ -1693,22 +1755,38 @@ static void EsCreateDecoder( es_out_t *out, es_out_id_t *p_es )
 
     EsOutDecoderChangeDelay( out, p_es );
 }
+
+
+static void EsDestroyDecoderStream( es_out_t *out, es_out_id_t *p_es )
+{
+    es_out_sys_t   *p_sys = out->p_sys;
+
+    vlc_mutex_lock( &p_sys->lock );    
+    if( p_es->p_dec_stream )
+    {
+        input_DecoderDelete( p_es->p_dec_stream );
+        p_es->p_dec_stream = NULL;
+    }
+    vlc_mutex_unlock( &p_sys->lock );
+}
+
 static void EsDestroyDecoder( es_out_t *out, es_out_id_t *p_es )
 {
     VLC_UNUSED(out);
 
-    if( !p_es->p_dec )
-        return;
-
-    input_DecoderDelete( p_es->p_dec );
-    p_es->p_dec = NULL;
-
-    if( p_es->p_dec_record )
+    if( p_es->p_dec )
     {
-        input_DecoderDelete( p_es->p_dec_record );
-        p_es->p_dec_record = NULL;
+        input_DecoderDelete( p_es->p_dec );
+        p_es->p_dec = NULL;
+
+        if( p_es->p_dec_record )
+        {
+            input_DecoderDelete( p_es->p_dec_record );
+            p_es->p_dec_record = NULL;
+        }
     }
 }
+
 
 static void EsSelect( es_out_t *out, es_out_id_t *es )
 {
@@ -1863,7 +1941,8 @@ static void EsOutSelect( es_out_t *out, es_out_id_t *es, bool b_force )
         return;
     }
 
-    bool b_auto_unselect = p_esprops && p_sys->i_mode == ES_OUT_MODE_AUTO &&
+    bool b_auto_unselect = p_esprops && (p_sys->i_mode == ES_OUT_MODE_AUTO
+                                         || p_sys->i_mode == ES_OUT_MODE_SLAVE_SOUT ) &&
                            p_esprops->e_policy == ES_OUT_ES_POLICY_EXCLUSIVE &&
                            p_esprops->p_main_es && p_esprops->p_main_es != es;
 
@@ -1898,7 +1977,7 @@ static void EsOutSelect( es_out_t *out, es_out_id_t *es, bool b_force )
             free( prgms );
         }
     }
-    else if( p_sys->i_mode == ES_OUT_MODE_AUTO )
+    else if( p_sys->i_mode == ES_OUT_MODE_AUTO  || p_sys->i_mode == ES_OUT_MODE_SLAVE_SOUT )
     {
         const es_out_id_t *wanted_es = NULL;
 
@@ -1984,8 +2063,16 @@ static void EsOutSelect( es_out_t *out, es_out_id_t *es, bool b_force )
         }
     }
 
+    if (p_sys->i_mode == ES_OUT_MODE_SLAVE_SOUT)
+    {
+        if (! es->p_dec_stream )
+        {
+            EsCreateDecoderStream( out, es );
+        }
+    }
+
     /* FIXME TODO handle priority here */
-    if( p_esprops && p_sys->i_mode == ES_OUT_MODE_AUTO && EsIsSelected( es ) )
+    if( p_esprops && (p_sys->i_mode == ES_OUT_MODE_AUTO || p_sys->i_mode == ES_OUT_MODE_SLAVE_SOUT ) && EsIsSelected( es ) )
         p_esprops->p_main_es = es;
 }
 
@@ -2093,14 +2180,13 @@ static int EsOutSend( es_out_t *out, es_out_id_t *es, block_t *p_block )
                 i_date = es->p_pgrm->i_last_pcr;
         }
 
-        if( i_date != VLC_TICK_INVALID )
-            es->i_pts_level = i_date + p_block->i_length;
-
-        /* If i_date is still invalid (first/all non dated), expect to be in preroll */
-
-        if( i_date == VLC_TICK_INVALID ||
-            es->i_pts_level < p_sys->i_preroll_end )
-            p_block->i_flags |= BLOCK_FLAG_PREROLL;
+    /* Decode */
+    if( es->p_dec_stream )
+    {
+        block_t *p_dup = block_Duplicate( p_block );
+        if( p_dup )
+            input_DecoderDecode( es->p_dec_stream, p_dup,
+                                 input_priv(p_input)->b_out_pace_control );
     }
 
     if( !es->p_dec )
@@ -2179,21 +2265,28 @@ static void EsOutDel( es_out_t *out, es_out_id_t *es )
     es_out_es_props_t *p_esprops = GetPropsByCat( p_sys, es->fmt.i_cat );
 
     /* We don't try to reselect */
-    if( es->p_dec )
-    {   /* FIXME: This might hold the ES output caller (i.e. the demux), and
+    if( es->p_dec || es->p_dec_stream )
+    {   
+      /* FIXME: This might hold the ES output caller (i.e. the demux), and
          * the corresponding thread (typically the input thread), for a little
          * bit too long if the ES is deleted in the middle of a stream. */
-        input_DecoderDrain( es->p_dec );
-        while( !input_Stopped(p_sys->p_input) && !p_sys->b_buffering )
+      if (es->p_dec)
+	    input_DecoderDrain( es->p_dec );
+      
+      while( !input_Stopped(p_sys->p_input) && !p_sys->b_buffering )
         {
-            if( input_DecoderIsEmpty( es->p_dec ) &&
-                ( !es->p_dec_record || input_DecoderIsEmpty( es->p_dec_record ) ))
+            if( ( !es->p_dec        || input_DecoderIsEmpty( es->p_dec ) ) &&
+                ( !es->p_dec_record || input_DecoderIsEmpty( es->p_dec_record ) ) &&
+                ( !es->p_dec_stream || input_DecoderIsEmpty( es->p_dec_stream ) ) )
                 break;
             /* FIXME there should be a way to have auto deleted es, but there will be
              * a problem when another codec of the same type is created (mainly video) */
             msleep( 20*1000 );
         }
-        EsUnselect( out, es, es->p_pgrm == p_sys->p_pgrm );
+	  if ( es->p_dec )
+	    EsUnselect( out, es, es->p_pgrm == p_sys->p_pgrm );
+  	  if (es->p_dec_stream)
+   	    EsDestroyDecoderStream(out, es);
     }
 
     if( es->p_pgrm == p_sys->p_pgrm )
@@ -2287,7 +2380,7 @@ static int EsOutControlLocked( es_out_t *out, int i_query, va_list args )
         es_out_id_t *es = va_arg( args, es_out_id_t * );
         bool *pb = va_arg( args, bool * );
 
-        *pb = EsIsSelected( es );
+        *pb = EsIsSelectedOrStreaming( es );
         return VLC_SUCCESS;
     }
 
@@ -2314,7 +2407,7 @@ static int EsOutControlLocked( es_out_t *out, int i_query, va_list args )
         const int i_mode = va_arg( args, int );
         assert( i_mode == ES_OUT_MODE_NONE || i_mode == ES_OUT_MODE_ALL ||
                 i_mode == ES_OUT_MODE_AUTO || i_mode == ES_OUT_MODE_PARTIAL ||
-                i_mode == ES_OUT_MODE_END );
+                i_mode == ES_OUT_MODE_SLAVE_SOUT  || i_mode == ES_OUT_MODE_END );
 
         if( i_mode != ES_OUT_MODE_NONE && !p_sys->b_active && p_sys->i_es > 0 )
         {
@@ -2334,12 +2427,23 @@ static int EsOutControlLocked( es_out_t *out, int i_query, va_list args )
         p_sys->b_active = i_mode != ES_OUT_MODE_NONE;
         p_sys->i_mode = i_mode;
 
+        if ( i_mode == ES_OUT_MODE_SLAVE_SOUT && p_sys->p_sout_stream == NULL )
+        {
+            char* psz_sout = var_GetNonEmptyString( p_sys->p_input, "slave-sout");
+            if ( psz_sout )
+            {
+                p_sys->p_sout_stream = sout_NewInstance( p_sys->p_input, psz_sout );
+                free(psz_sout);
+            }
+        }
         /* Reapply policy mode */
         for( int i = 0; i < p_sys->i_es; i++ )
         {
             if( EsIsSelected( p_sys->es[i] ) )
                 EsUnselect( out, p_sys->es[i],
                             p_sys->es[i]->p_pgrm == p_sys->p_pgrm );
+	    //if ( p_sys->es[i]->p_dec_stream )
+	    //    EsDestroyDecoderStream(out, p_sys->es[i]);
         }
         for( int i = 0; i < p_sys->i_es; i++ )
             EsOutSelect( out, p_sys->es[i], false );
@@ -2372,14 +2476,24 @@ static int EsOutControlLocked( es_out_t *out, int i_query, va_list args )
             {
                 if( es == p_sys->es[i] )
                 {
-                    if( i_query == ES_OUT_RESTART_ES && p_sys->es[i]->p_dec )
+                    if( i_query == ES_OUT_RESTART_ES )
                     {
-                        EsDestroyDecoder( out, p_sys->es[i] );
-                        EsCreateDecoder( out, p_sys->es[i] );
+                        if ( p_sys->es[i]->p_dec )
+                        {
+                            EsDestroyDecoder( out, p_sys->es[i] );
+                            EsCreateDecoder( out, p_sys->es[i] );
+                        }
+                        if ( p_sys->es[i]->p_dec_stream )
+                        {
+                            EsDestroyDecoderStream( out, p_sys->es[i] );
+                            EsCreateDecoderStream( out, p_sys->es[i] );
+                        }
                     }
                     else if( i_query == ES_OUT_SET_ES )
                     {
                         EsOutSelect( out, es, true );
+
+                        EsCreateDecoderStream(out, p_sys->es[i]);
                     }
                     break;
                 }
@@ -2396,6 +2510,11 @@ static int EsOutControlLocked( es_out_t *out, int i_query, va_list args )
                             {
                                 EsDestroyDecoder( out, p_sys->es[i] );
                                 EsCreateDecoder( out, p_sys->es[i] );
+                            }
+                            if( p_sys->es[i]->p_dec_stream )
+                            {
+                                EsDestroyDecoderStream( out, p_sys->es[i] );
+                                EsCreateDecoderStream( out, p_sys->es[i] );
                             }
                         }
                         else
@@ -2417,9 +2536,10 @@ static int EsOutControlLocked( es_out_t *out, int i_query, va_list args )
         selected_es[0] = p_sys->i_es;
         for( int i = 0; i < p_sys->i_es; i++ )
         {
-            if( EsIsSelected( p_sys->es[i] ) )
+            if( EsIsSelectedOrStreaming( p_sys->es[i] ) )
             {
                 EsDestroyDecoder( out, p_sys->es[i] );
+                EsDestroyDecoderStream(out, p_sys->es[i]);
                 selected_es[i + 1] = p_sys->es[i]->i_id;
             }
             else
@@ -2440,6 +2560,7 @@ static int EsOutControlLocked( es_out_t *out, int i_query, va_list args )
                 es_out_id_t *p_es = EsOutGetFromID( out, i_id );
                 EsCreateDecoder( out, p_es );
             }
+            EsCreateDecoderStream(out, p_sys->es[i]);
         }
         free(selected_es);
         return VLC_SUCCESS;
@@ -2607,6 +2728,11 @@ static int EsOutControlLocked( es_out_t *out, int i_query, va_list args )
         {
             EsDestroyDecoder( out, es );
             EsCreateDecoder( out, es );
+        }
+        if ( es->p_dec_stream )
+        {
+            EsDestroyDecoderStream( out, es );
+            EsCreateDecoderStream( out, es );
         }
 
         return VLC_SUCCESS;
@@ -3213,8 +3339,12 @@ static void EsOutUpdateInfo( es_out_t *out, es_out_id_t *es, const es_format_t *
             info_category_AddInfo( p_cat, _("Buffer dimensions"), "%ux%u",
                                    fmt->video.i_width, fmt->video.i_height );
 
-       if( fmt->video.i_frame_rate > 0 &&
-           fmt->video.i_frame_rate_base > 0 )
+
+       if (fmt->video.b_missing_frame_rate)
+       {
+            info_category_AddInfo( p_cat, _("Frame rate"), _("Unknown"));       
+       } 
+       else if (fmt->video.i_frame_rate > 0 && fmt->video.i_frame_rate_base > 0 )
        {
            div = lldiv( (float)fmt->video.i_frame_rate /
                                fmt->video.i_frame_rate_base * 1000000,
@@ -3230,9 +3360,24 @@ static void EsOutUpdateInfo( es_out_t *out, es_out_id_t *es, const es_format_t *
        {
            const char *psz_chroma_description =
                 vlc_fourcc_GetDescription( VIDEO_ES, fmt->i_codec );
-           if( psz_chroma_description )
+           if( psz_chroma_description &&  psz_chroma_description[0] != '\0')
+           {
                info_category_AddInfo( p_cat, _("Decoded format"), "%s",
                                       psz_chroma_description );
+           }
+           else
+           {
+               uint8_t fc4 = (fmt->i_codec & 0xFF000000) >> 24;
+               uint8_t fc3 = (fmt->i_codec & 0x00FF0000) >> 16;
+               uint8_t fc2 = (fmt->i_codec & 0x0000FF00) >> 8;
+               uint8_t fc1 = (fmt->i_codec & 0xFF);
+
+               char fourcc[32];
+               sprintf(fourcc, "(%08X - %c%c%c%c)", fmt->i_codec, fc1, fc2, fc3, fc4);
+
+               info_category_AddInfo( p_cat, _("Decoded format"), "%s",
+                                      fourcc );
+           }
        }
        {
            static const char orient_names[][13] = {
@@ -3387,6 +3532,68 @@ static void EsOutUpdateInfo( es_out_t *out, es_out_id_t *es, const es_format_t *
        {
            info_category_AddInfo( p_cat, "MaxFALL", "%d cd/m²",
                                   fmt->video.lighting.MaxFALL );
+       }
+       if (es->p_dec)
+       {
+            switch ( es->p_dec->fmt_out.video.i_interlaced) {
+            case INTERLACED_INTERLACED_UNKNOWN:
+                info_category_AddInfo( p_cat, _("Field Order"), _("Interlaced Unknown") );
+                break;
+            case INTERLACED_INTERLACED_TOP_FIRST:
+                info_category_AddInfo( p_cat, _("Field Order"), _("Interlaced Top First") );
+                break;
+            case INTERLACED_INTERLACED_BOTTOM_FIRST:
+                info_category_AddInfo( p_cat, _("Field Order"), _("Interlaced Bottom First") );
+                break;
+            case INTERLACED_INTERLACED_TOP_BOTTOM_TOP:
+                info_category_AddInfo( p_cat, _("Field Order"), _("Interlaced Top Bottom Top") );
+                break;
+            case INTERLACED_INTERLACED_BOTTOM_TOP_BOTTOM:
+                info_category_AddInfo( p_cat, _("Field Order"), _("Interlaced Bottom Top Bottom") );
+                break;
+            case INTERLACED_PROGRESSIVE:
+                info_category_AddInfo( p_cat, _("Field Order"), _("Progressive") );
+                break;
+            default:
+                break;
+            }
+#define AFD_FORMAT(id, format) \
+    case id:\
+       info_category_AddInfo( p_cat, _("Active Format Description"),  _(format) ); \
+    break
+            if ( fmt->video.b_afdpresent )
+                switch ( fmt->video.i_afd ) {
+                AFD_FORMAT(0x0, "[0000] Unknown");
+                AFD_FORMAT(0x2, "[0010] 16:9 (top)");
+                AFD_FORMAT(0x3, "[0011] 14:9 (top)");
+                AFD_FORMAT(0x4, "[0100] > 16:9 (centre)");
+                AFD_FORMAT(0x8, "[1000] As the coded frame");
+                AFD_FORMAT(0x9, "[1001] 4:3 (centre)");
+                AFD_FORMAT(0xA, "[1010] 16:9 (centre)");
+                AFD_FORMAT(0xB, "[1011] 14:9 (top)");
+                AFD_FORMAT(0xD, "[1101] 4:3 (with shoot and protect 14:9 centre)");
+                AFD_FORMAT(0xE, "[1110] 16:9 (with shoot and protect 14:9 centre)");
+                AFD_FORMAT(0xF, "[1111] 16:9 (with shoot and protect  4:3 centre)");
+                default:
+                    info_category_AddInfo( p_cat, _("AFD"),  _("[%c%c%c%c] Reserved"),
+                                           (es->p_dec->fmt_out.video.i_afd & 8) ? '1' : '0',
+                                           (es->p_dec->fmt_out.video.i_afd & 4) ? '1' : '0',
+                                           (es->p_dec->fmt_out.video.i_afd & 2) ? '1' : '0',
+                                           (es->p_dec->fmt_out.video.i_afd & 1) ? '1' : '0');
+                    break;
+                }
+#undef AFD_FORMAT
+            if ( fmt->video.bardata.b_present )
+            {
+                if ( fmt->video.bardata.i_end_of_top_bar != -1 )
+                    info_category_AddInfo( p_cat, _("End of top bar (px)"), "%i", fmt->video.bardata.i_end_of_top_bar );
+                if ( fmt->video.bardata.i_start_of_bottom_bar != -1 )
+                    info_category_AddInfo( p_cat, _("Start of bottom bar (px)"), "%i", fmt->video.bardata.i_start_of_bottom_bar );
+                if ( fmt->video.bardata.i_end_of_left_bar != -1 )
+                    info_category_AddInfo( p_cat, _("End of left bar (px)"), "%i", fmt->video.bardata.i_end_of_left_bar );
+                if ( fmt->video.bardata.i_start_of_right_bar != -1 )
+                    info_category_AddInfo( p_cat, _("Start of right bar (px)"), "%i", fmt->video.bardata.i_start_of_right_bar );
+            }
        }
        break;
 
