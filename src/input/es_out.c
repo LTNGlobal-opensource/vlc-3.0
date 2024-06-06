@@ -654,13 +654,14 @@ static void EsOutChangePosition( es_out_t *out )
                     input_DecoderStartWait( p_es->p_dec_record );
             }
         }
-        p_es->i_pts_level = VLC_TICK_INVALID;
-        if( p_es->p_dec_stream != NULL )
+		if( p_es->p_dec_stream != NULL )
         {
             input_DecoderFlush( p_es->p_dec_stream );
             if( !p_sys->b_buffering )
                 input_DecoderStartWait( p_es->p_dec_stream );
         }
+        p_es->i_pts_level = VLC_TICK_INVALID;
+
     }
 
     for( int i = 0; i < p_sys->i_pgrm; i++ ) {
@@ -762,10 +763,9 @@ static void EsOutDecodersStopBuffering( es_out_t *out, bool b_forced )
     {
         es_out_id_t *p_es = p_sys->es[i];
 
-        if( !p_es->p_dec )
-            continue;
+        if( p_es->p_dec )
+             input_DecoderStopWait( p_es->p_dec );
 
-        input_DecoderStopWait( p_es->p_dec );
         if( p_es->p_dec_record )
             input_DecoderStopWait( p_es->p_dec_record );
 
@@ -1774,18 +1774,19 @@ static void EsDestroyDecoder( es_out_t *out, es_out_id_t *p_es )
 {
     VLC_UNUSED(out);
 
-    if( !p_es->p_dec )
-        return;
-
-    input_DecoderDelete( p_es->p_dec );
-    p_es->p_dec = NULL;
-
-    if( p_es->p_dec_record )
+    if( p_es->p_dec )
     {
-        input_DecoderDelete( p_es->p_dec_record );
-        p_es->p_dec_record = NULL;
+        input_DecoderDelete( p_es->p_dec );
+        p_es->p_dec = NULL;
+
+        if( p_es->p_dec_record )
+        {
+            input_DecoderDelete( p_es->p_dec_record );
+            p_es->p_dec_record = NULL;
+        }
     }
 }
+
 
 static void EsSelect( es_out_t *out, es_out_id_t *es )
 {
@@ -2179,24 +2180,13 @@ static int EsOutSend( es_out_t *out, es_out_id_t *es, block_t *p_block )
                 i_date = es->p_pgrm->i_last_pcr;
         }
 
-        if( i_date != VLC_TICK_INVALID )
-            es->i_pts_level = i_date + p_block->i_length;
-			
-			
-		/* Decode */
-		if( es->p_dec_stream )
-		{
-		    block_t *p_dup = block_Duplicate( p_block );
-		    if( p_dup )
-				input_DecoderDecode( es->p_dec_stream, p_dup,
-	                                 input_priv(p_input)->b_out_pace_control );
-		}
-
-        /* If i_date is still invalid (first/all non dated), expect to be in preroll */
-
-        if( i_date == VLC_TICK_INVALID ||
-            es->i_pts_level < p_sys->i_preroll_end )
-            p_block->i_flags |= BLOCK_FLAG_PREROLL;
+    /* Decode */
+    if( es->p_dec_stream )
+    {
+        block_t *p_dup = block_Duplicate( p_block );
+        if( p_dup )
+            input_DecoderDecode( es->p_dec_stream, p_dup,
+                                 input_priv(p_input)->b_out_pace_control );
     }
 
     if( !es->p_dec )
