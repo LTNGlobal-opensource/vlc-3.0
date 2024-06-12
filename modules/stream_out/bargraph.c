@@ -379,7 +379,7 @@ static int  decoder_queue_audio( decoder_t * p_dec, block_t * block_in)
     memcpy(&((peak_data_t*)block_out->p_buffer)->channels_peaks, f_value, nbChannels * sizeof(float));
     vlc_fifo_Lock(data->p_fifo);
     //don't leak is nobody is consuming the fifo
-    if ( vlc_fifo_GetCount(data->p_fifo) > 100 )
+    if ( vlc_fifo_GetCount(data->p_fifo) > 200 )
     {
         block_t* block_tmp = vlc_fifo_DequeueUnlocked(data->p_fifo);
         block_Release(block_tmp);
