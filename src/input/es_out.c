@@ -2179,6 +2179,7 @@ static int EsOutSend( es_out_t *out, es_out_id_t *es, block_t *p_block )
             else if( es->p_pgrm->i_last_pcr != VLC_TICK_INVALID )
                 i_date = es->p_pgrm->i_last_pcr;
         }
+    }
 
     /* Decode */
     if( es->p_dec_stream )
